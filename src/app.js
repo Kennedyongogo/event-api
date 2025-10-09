@@ -7,20 +7,13 @@ const { initializeModels, setupAssociations } = require("./models");
 const { errorHandler } = require("./middleware/errorHandler");
 
 // Import all routes
-const adminRoutes = require("./routes/adminRoutes");
-const userRoutes = require("./routes/userRoutes");
-const projectRoutes = require("./routes/projectRoutes");
-const publicProjectRoutes = require("./routes/publicProjectRoutes");
-const taskRoutes = require("./routes/taskRoutes");
-const materialRoutes = require("./routes/materialRoutes");
-const equipmentRoutes = require("./routes/equipmentRoutes");
-const laborRoutes = require("./routes/laborRoutes");
-const budgetRoutes = require("./routes/budgetRoutes");
-const documentRoutes = require("./routes/documentRoutes");
-const progressUpdateRoutes = require("./routes/progressUpdateRoutes");
-const issueRoutes = require("./routes/issueRoutes");
-const notificationRoutes = require("./routes/notificationRoutes");
-const quotationRoutes = require("./routes/quotationRoutes");
+const publicUserRoutes = require("./routes/publicUserRoutes");
+const eventOrganizerRoutes = require("./routes/eventOrganizerRoutes");
+const adminUserRoutes = require("./routes/adminUserRoutes");
+const eventRoutes = require("./routes/eventRoutes");
+const ticketTypeRoutes = require("./routes/ticketTypeRoutes");
+const ticketPurchaseRoutes = require("./routes/ticketPurchaseRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
 
@@ -39,68 +32,61 @@ app.use((req, res, next) => {
   next();
 });
 
-// Static file serving for project documents and images
-const projectsUploadPath = path.join(__dirname, "..", "uploads", "projects");
+// Static file serving for event ticketing system
+const eventsUploadPath = path.join(__dirname, "..", "uploads", "events");
+const organizersUploadPath = path.join(
+  __dirname,
+  "..",
+  "uploads",
+  "organizers"
+);
+const profilesUploadPath = path.join(__dirname, "..", "uploads", "profiles");
+const qrcodesUploadPath = path.join(__dirname, "..", "uploads", "qrcodes");
 const documentsUploadPath = path.join(__dirname, "..", "uploads", "documents");
-const projectDocumentsUploadPath = path.join(
-  __dirname,
-  "..",
-  "uploads",
-  "projectdocuments"
-);
-const progressUpdatesUploadPath = path.join(
-  __dirname,
-  "..",
-  "uploads",
-  "progress-updates"
-);
-const logosPath = path.join(__dirname, "..", "public", "logos");
+const miscUploadPath = path.join(__dirname, "..", "uploads", "misc");
 
-console.log("📁 Projects upload path:", projectsUploadPath);
+console.log("📁 Events upload path:", eventsUploadPath);
+console.log("📁 Organizers upload path:", organizersUploadPath);
+console.log("📁 Profiles upload path:", profilesUploadPath);
+console.log("📁 QR Codes upload path:", qrcodesUploadPath);
 console.log("📁 Documents upload path:", documentsUploadPath);
-console.log("📁 Project Documents upload path:", projectDocumentsUploadPath);
-console.log("📁 Progress Updates upload path:", progressUpdatesUploadPath);
-console.log("📁 Logos path:", logosPath);
-console.log("📁 Projects directory exists:", fs.existsSync(projectsUploadPath));
+console.log("📁 Misc upload path:", miscUploadPath);
+console.log("📁 Events directory exists:", fs.existsSync(eventsUploadPath));
+console.log(
+  "📁 Organizers directory exists:",
+  fs.existsSync(organizersUploadPath)
+);
+console.log("📁 Profiles directory exists:", fs.existsSync(profilesUploadPath));
+console.log("📁 QR Codes directory exists:", fs.existsSync(qrcodesUploadPath));
 console.log(
   "📁 Documents directory exists:",
   fs.existsSync(documentsUploadPath)
 );
-console.log(
-  "📁 Project Documents directory exists:",
-  fs.existsSync(projectDocumentsUploadPath)
-);
-console.log(
-  "📁 Progress Updates directory exists:",
-  fs.existsSync(progressUpdatesUploadPath)
-);
+console.log("📁 Misc directory exists:", fs.existsSync(miscUploadPath));
 
-app.use("/uploads/projects", express.static(projectsUploadPath));
+app.use("/uploads/events", express.static(eventsUploadPath));
+app.use("/uploads/organizers", express.static(organizersUploadPath));
+app.use("/uploads/profiles", express.static(profilesUploadPath));
+app.use("/uploads/qrcodes", express.static(qrcodesUploadPath));
 app.use("/uploads/documents", express.static(documentsUploadPath));
-app.use(
-  "/uploads/projectdocuments",
-  express.static(projectDocumentsUploadPath)
-);
-app.use("/uploads/progress-updates", express.static(progressUpdatesUploadPath));
-app.use("/logos", express.static(logosPath));
+app.use("/uploads/misc", express.static(miscUploadPath));
 
 // API routes
 console.log("🔗 Registering API routes...");
-app.use("/api/admins", adminRoutes);
+app.use("/api/public-users", publicUserRoutes);
+console.log("✅ /api/public-users route registered");
+app.use("/api/organizers", eventOrganizerRoutes);
+console.log("✅ /api/organizers route registered");
+app.use("/api/admins", adminUserRoutes);
 console.log("✅ /api/admins route registered");
-app.use("/api/users", userRoutes);
-app.use("/api/projects", projectRoutes);
-app.use("/api/public-projects", publicProjectRoutes);
-app.use("/api/tasks", taskRoutes);
-app.use("/api/materials", materialRoutes);
-app.use("/api/equipment", equipmentRoutes);
-app.use("/api/labor", laborRoutes);
-app.use("/api/budgets", budgetRoutes);
-app.use("/api/documents", documentRoutes);
-app.use("/api/progress-updates", progressUpdateRoutes);
-app.use("/api/issues", issueRoutes);
-app.use("/api/notifications", notificationRoutes);
-app.use("/api/quotations", quotationRoutes);
+app.use("/api/events", eventRoutes);
+console.log("✅ /api/events route registered");
+app.use("/api/ticket-types", ticketTypeRoutes);
+console.log("✅ /api/ticket-types route registered");
+app.use("/api/purchases", ticketPurchaseRoutes);
+console.log("✅ /api/purchases route registered");
+app.use("/api/payments", paymentRoutes);
+console.log("✅ /api/payments route registered");
 console.log("✅ All API routes registered");
 
 // Error handling middleware
@@ -110,9 +96,12 @@ app.use(errorHandler);
 const createUploadDirectories = () => {
   const uploadDirs = [
     path.join(__dirname, "..", "uploads"),
-    path.join(__dirname, "..", "uploads", "projects"),
+    path.join(__dirname, "..", "uploads", "events"),
+    path.join(__dirname, "..", "uploads", "organizers"),
+    path.join(__dirname, "..", "uploads", "profiles"),
+    path.join(__dirname, "..", "uploads", "qrcodes"),
     path.join(__dirname, "..", "uploads", "documents"),
-    path.join(__dirname, "..", "public", "logos"),
+    path.join(__dirname, "..", "uploads", "misc"),
   ];
 
   uploadDirs.forEach((dir) => {

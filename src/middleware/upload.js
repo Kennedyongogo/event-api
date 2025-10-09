@@ -7,33 +7,25 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     // Determine upload directory based on file type
     let uploadPath;
-    if (file.fieldname === "blueprint" || file.fieldname === "blueprints") {
-      uploadPath = path.join(__dirname, "..", "..", "uploads", "projects");
-    } else if (file.fieldname === "documents") {
-      uploadPath = path.join(
-        __dirname,
-        "..",
-        "..",
-        "uploads",
-        "projectdocuments"
-      );
-    } else if (file.fieldname === "general_documents") {
-      uploadPath = path.join(__dirname, "..", "..", "uploads", "documents");
-    } else if (file.fieldname === "profile_picture") {
-      uploadPath = path.join(__dirname, "..", "..", "uploads", "documents");
+
+    if (file.fieldname === "event_image" || file.fieldname === "image_url") {
+      uploadPath = path.join(__dirname, "..", "..", "uploads", "events");
     } else if (
-      file.fieldname === "progress_images" ||
-      file.fieldname === "images"
+      file.fieldname === "logo" ||
+      file.fieldname === "organizer_logo"
     ) {
-      uploadPath = path.join(
-        __dirname,
-        "..",
-        "..",
-        "uploads",
-        "progress-updates"
-      );
-    } else {
+      uploadPath = path.join(__dirname, "..", "..", "uploads", "organizers");
+    } else if (file.fieldname === "profile_image") {
+      uploadPath = path.join(__dirname, "..", "..", "uploads", "profiles");
+    } else if (file.fieldname === "qr_code") {
+      uploadPath = path.join(__dirname, "..", "..", "uploads", "qrcodes");
+    } else if (
+      file.fieldname === "documents" ||
+      file.fieldname === "verification_docs"
+    ) {
       uploadPath = path.join(__dirname, "..", "..", "uploads", "documents");
+    } else {
+      uploadPath = path.join(__dirname, "..", "..", "uploads", "misc");
     }
 
     console.log("📁 Upload destination:", uploadPath);
@@ -64,6 +56,7 @@ const fileFilter = (req, file, cb) => {
     "image/jpg": ".jpg",
     "image/png": ".png",
     "image/gif": ".gif",
+    "image/webp": ".webp",
     "application/pdf": ".pdf",
     "application/msword": ".doc",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -96,26 +89,31 @@ const upload = multer({
   },
 });
 
-// Middleware for single file upload (blueprint)
-const uploadBlueprint = upload.single("blueprint");
+// Middleware for single event image upload
+const uploadEventImage = upload.single("event_image");
 
-// Middleware for multiple blueprint files upload
-const uploadBlueprints = upload.fields([
-  { name: "blueprints", maxCount: 10 },
-  { name: "documents", maxCount: 10 },
-]); // Max 10 blueprint files and 10 document files
-
-// Middleware for multiple file upload (documents)
-const uploadDocuments = upload.array("documents", 10); // Max 10 files
-
-// Middleware for general document uploads (goes to documents folder)
-const uploadGeneralDocuments = upload.array("general_documents", 10); // Max 10 files
+// Middleware for single organizer logo upload
+const uploadOrganizerLogo = upload.single("logo");
 
 // Middleware for single profile picture upload
-const uploadProfilePicture = upload.single("profile_picture");
+const uploadProfileImage = upload.single("profile_image");
 
-// Middleware for progress update images upload
-const uploadProgressImages = upload.array("progress_images", 10); // Max 10 progress images
+// Middleware for QR code upload
+const uploadQRCode = upload.single("qr_code");
+
+// Middleware for multiple documents upload (for verification, KRA, etc.)
+const uploadDocuments = upload.array("documents", 10); // Max 10 files
+
+// Middleware for verification documents (organizer registration)
+const uploadVerificationDocs = upload.fields([
+  { name: "kra_certificate", maxCount: 1 },
+  { name: "business_certificate", maxCount: 1 },
+  { name: "id_document", maxCount: 2 },
+  { name: "bank_statement", maxCount: 1 },
+]);
+
+// Middleware for multiple event images (if needed)
+const uploadMultipleEventImages = upload.array("event_images", 5); // Max 5 images
 
 // Error handling middleware for multer
 const handleUploadError = (error, req, res, next) => {
@@ -132,9 +130,15 @@ const handleUploadError = (error, req, res, next) => {
         message: "Too many files. Maximum is 10 files.",
       });
     }
+    if (error.code === "LIMIT_UNEXPECTED_FILE") {
+      return res.status(400).json({
+        success: false,
+        message: "Unexpected file field.",
+      });
+    }
   }
 
-  if (error.message.includes("Invalid file type")) {
+  if (error && error.message.includes("Invalid file type")) {
     return res.status(400).json({
       success: false,
       message: error.message,
@@ -145,11 +149,12 @@ const handleUploadError = (error, req, res, next) => {
 };
 
 module.exports = {
-  uploadBlueprint,
-  uploadBlueprints,
+  uploadEventImage,
+  uploadOrganizerLogo,
+  uploadProfileImage,
+  uploadQRCode,
   uploadDocuments,
-  uploadGeneralDocuments,
-  uploadProfilePicture,
-  uploadProgressImages,
+  uploadVerificationDocs,
+  uploadMultipleEventImages,
   handleUploadError,
 };

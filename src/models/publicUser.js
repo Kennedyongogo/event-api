@@ -1,36 +1,43 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  const User = sequelize.define(
-    "User",
+  const PublicUser = sequelize.define(
+    "PublicUser",
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
-      name: {
+      full_name: {
         type: DataTypes.STRING,
         allowNull: false,
       },
       email: {
         type: DataTypes.STRING,
-        allowNull: true,
+        allowNull: false,
         unique: true,
         validate: {
           isEmail: true,
         },
       },
+      password: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
       phone: {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      type: {
-        type: DataTypes.ENUM("client", "guest", "worker"),
-        allowNull: false,
-        defaultValue: "guest",
+      address: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
-      password: {
+      county: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      profile_image: {
         type: DataTypes.STRING,
         allowNull: true,
       },
@@ -44,10 +51,10 @@ module.exports = (sequelize) => {
       },
     },
     {
-      tableName: "users",
+      tableName: "public_users",
       timestamps: true,
     }
   );
 
-  return User;
+  return PublicUser;
 };

@@ -1,15 +1,15 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  const Admin = sequelize.define(
-    "Admin",
+  const AdminUser = sequelize.define(
+    "AdminUser",
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
-      name: {
+      full_name: {
         type: DataTypes.STRING,
         allowNull: false,
       },
@@ -25,16 +25,23 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
-      role: {
-        type: DataTypes.ENUM("engineer", "project_manager", "super_admin"),
-        allowNull: false,
-        defaultValue: "engineer",
-      },
       phone: {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      profile_picture: {
+      department: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      permissions: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      role: {
+        type: DataTypes.ENUM("super_admin", "finance_admin", "support_admin"),
+        defaultValue: "super_admin",
+      },
+      profile_image: {
         type: DataTypes.STRING,
         allowNull: true,
       },
@@ -48,10 +55,10 @@ module.exports = (sequelize) => {
       },
     },
     {
-      tableName: "admins",
+      tableName: "admin_users",
       timestamps: true,
     }
   );
 
-  return Admin;
+  return AdminUser;
 };

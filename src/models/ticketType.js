@@ -1,49 +1,40 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  const Material = sequelize.define(
-    "Material",
+  const TicketType = sequelize.define(
+    "TicketType",
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
-      task_id: {
+      event_id: {
         type: DataTypes.UUID,
         allowNull: false,
-        references: {
-          model: "tasks",
-          key: "id",
-        },
       },
       name: {
         type: DataTypes.STRING,
         allowNull: false,
       },
-      unit: {
-        type: DataTypes.STRING,
+      price: {
+        type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
       },
-      unit_cost: {
-        type: DataTypes.DECIMAL(15, 2),
+      total_quantity: {
+        type: DataTypes.INTEGER,
         allowNull: false,
       },
-      quantity_required: {
-        type: DataTypes.DECIMAL(15, 2),
+      remaining_quantity: {
+        type: DataTypes.INTEGER,
         allowNull: false,
-      },
-      quantity_used: {
-        type: DataTypes.DECIMAL(15, 2),
-        allowNull: true,
-        defaultValue: 0,
       },
     },
     {
-      tableName: "materials",
+      tableName: "ticket_types",
       timestamps: true,
     }
   );
 
-  return Material;
+  return TicketType;
 };
