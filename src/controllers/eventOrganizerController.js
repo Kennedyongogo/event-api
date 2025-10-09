@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const config = require("../config/config");
 const { Op } = require("sequelize");
+const { convertToRelativePath } = require("../utils/filePath");
 
 // Register new event organizer
 const register = async (req, res) => {
@@ -262,6 +263,9 @@ const updateProfile = async (req, res) => {
       });
     }
 
+    // Handle logo upload - convert absolute path to relative path if file uploaded
+    const logoUrl = convertToRelativePath(req.file?.path);
+
     await organizer.update({
       organization_name: organization_name || organizer.organization_name,
       contact_person: contact_person || organizer.contact_person,
@@ -271,7 +275,7 @@ const updateProfile = async (req, res) => {
       bank_name: bank_name || organizer.bank_name,
       bank_account_number: bank_account_number || organizer.bank_account_number,
       website: website || organizer.website,
-      logo: logo || organizer.logo,
+      logo: logoUrl || organizer.logo,
       pesapal_merchant_ref:
         pesapal_merchant_ref || organizer.pesapal_merchant_ref,
     });

@@ -8,7 +8,11 @@ const storage = multer.diskStorage({
     // Determine upload directory based on file type
     let uploadPath;
 
-    if (file.fieldname === "event_image" || file.fieldname === "image_url") {
+    if (
+      file.fieldname === "event_image" ||
+      file.fieldname === "image" ||
+      file.fieldname === "image_url"
+    ) {
       uploadPath = path.join(__dirname, "..", "..", "uploads", "events");
     } else if (
       file.fieldname === "logo" ||
@@ -89,8 +93,11 @@ const upload = multer({
   },
 });
 
-// Middleware for single event image upload
+// Middleware for single event image upload (flexible field names)
 const uploadEventImage = upload.single("event_image");
+
+// Alternative middleware for single event image upload with "image" field name
+const uploadEventImageAlt = upload.single("image");
 
 // Middleware for single organizer logo upload
 const uploadOrganizerLogo = upload.single("logo");
@@ -150,6 +157,7 @@ const handleUploadError = (error, req, res, next) => {
 
 module.exports = {
   uploadEventImage,
+  uploadEventImageAlt,
   uploadOrganizerLogo,
   uploadProfileImage,
   uploadQRCode,

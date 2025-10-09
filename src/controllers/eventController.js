@@ -5,6 +5,7 @@ const {
   TicketPurchase,
 } = require("../models");
 const { Op } = require("sequelize");
+const { convertToRelativePath } = require("../utils/filePath");
 
 // Create new event
 const createEvent = async (req, res) => {
@@ -41,8 +42,8 @@ const createEvent = async (req, res) => {
       });
     }
 
-    // Handle image upload
-    const image_url = req.file ? req.file.path : null;
+    // Handle image upload - convert absolute path to relative path
+    const image_url = convertToRelativePath(req.file?.path);
 
     // Create event with default commission rate (can be changed by admin during approval)
     const event = await Event.create({
@@ -302,6 +303,9 @@ const updateEvent = async (req, res) => {
       });
     }
 
+    // Handle new image upload if provided
+    const newImageUrl = convertToRelativePath(req.file?.path);
+
     await event.update({
       event_name: event_name || event.event_name,
       description: description || event.description,
@@ -312,7 +316,7 @@ const updateEvent = async (req, res) => {
       event_date: event_date || event.event_date,
       start_time: start_time || event.start_time,
       end_time: end_time || event.end_time,
-      image_url: image_url || event.image_url,
+      image_url: newImageUrl || event.image_url,
     });
 
     res.status(200).json({
