@@ -1,4 +1,10 @@
-const { EventOrganizer, Event, Payment, TicketPurchase, TicketType } = require("../models");
+const {
+  EventOrganizer,
+  Event,
+  Payment,
+  TicketPurchase,
+  TicketType,
+} = require("../models");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const config = require("../config/config");
@@ -499,6 +505,276 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+// Get organizer events analytics
+const getEventsAnalytics = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query;
+
+    // Build date filter
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          [Op.between]: [
+            new Date(startDate),
+            new Date(endDate + "T23:59:59.999Z"),
+          ],
+        },
+      };
+    }
+
+    const organizer = await EventOrganizer.findByPk(id);
+    if (!organizer) {
+      return res.status(404).json({
+        success: false,
+        message: "Organizer not found",
+      });
+    }
+
+    // Get events with date filtering
+    const events = await Event.findAll({
+      where: {
+        organizer_id: id,
+        ...dateFilter,
+      },
+      include: [
+        {
+          model: TicketType,
+          as: "ticketTypes",
+          attributes: [
+            "id",
+            "name",
+            "price",
+            "total_quantity",
+            "remaining_quantity",
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    // Calculate analytics
+    const totalEvents = events.length;
+    const eventsByStatus = events.reduce((acc, event) => {
+      acc[event.status] = (acc[event.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const eventsByCategory = events.reduce((acc, event) => {
+      acc[event.category] = (acc[event.category] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Calculate total tickets sold and revenue
+    let totalTicketsSold = 0;
+    let totalRevenue = 0;
+
+    for (const event of events) {
+      const purchases = await TicketPurchase.findAll({
+        where: {
+          event_id: event.id,
+          status: "paid",
+        },
+        include: [
+          {
+            model: Payment,
+            as: "payment",
+            where: { status: "completed" },
+          },
+        ],
+      });
+
+      totalTicketsSold += purchases.reduce(
+        (sum, purchase) => sum + purchase.quantity,
+        0
+      );
+
+      const eventRevenue = purchases.reduce((sum, purchase) => {
+        return sum + parseFloat(purchase.payment?.organizer_share || 0);
+      }, 0);
+
+      totalRevenue += eventRevenue;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        dateRange: {
+          start: startDate ? new Date(startDate).toISOString() : null,
+          end: endDate
+            ? new Date(endDate + "T23:59:59.999Z").toISOString()
+            : null,
+        },
+        totalEvents,
+        eventsByStatus,
+        eventsByCategory,
+        totalTicketsSold,
+        totalRevenue: totalRevenue.toFixed(2),
+        avgTicketsPerEvent:
+          totalEvents > 0 ? (totalTicketsSold / totalEvents).toFixed(2) : 0,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching events analytics:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching events analytics",
+      error: error.message,
+    });
+  }
+};
+
+// Get organizer revenue analytics
+const getRevenueAnalytics = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate, period = "month" } = req.query;
+
+    // Build date filter
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          [Op.between]: [
+            new Date(startDate),
+            new Date(endDate + "T23:59:59.999Z"),
+          ],
+        },
+      };
+    }
+
+    const organizer = await EventOrganizer.findByPk(id);
+    if (!organizer) {
+      return res.status(404).json({
+        success: false,
+        message: "Organizer not found",
+      });
+    }
+
+    // Get organizer's events
+    const events = await Event.findAll({
+      where: {
+        organizer_id: id,
+      },
+      attributes: ["id", "event_name"],
+    });
+
+    const eventIds = events.map((event) => event.id);
+
+    // Revenue by period
+    let groupByClause;
+    switch (period) {
+      case "day":
+        groupByClause = 'DATE(p."createdAt")';
+        break;
+      case "week":
+        groupByClause = 'EXTRACT(WEEK FROM p."createdAt")';
+        break;
+      case "month":
+        groupByClause = 'EXTRACT(MONTH FROM p."createdAt")';
+        break;
+      default:
+        groupByClause = 'EXTRACT(MONTH FROM p."createdAt")';
+    }
+
+    const revenueByPeriod = await Payment.findAll({
+      attributes: [
+        [sequelize.literal(groupByClause), "period"],
+        [
+          sequelize.fn("SUM", sequelize.col("organizer_share")),
+          "organizerRevenue",
+        ],
+        [sequelize.fn("SUM", sequelize.col("admin_share")), "adminRevenue"],
+        [sequelize.fn("SUM", sequelize.col("amount")), "totalRevenue"],
+        [
+          sequelize.fn("COUNT", sequelize.col("Payment.id")),
+          "transactionCount",
+        ],
+      ],
+      where: {
+        status: "completed",
+        ...dateFilter,
+      },
+      include: [
+        {
+          model: TicketPurchase,
+          as: "purchase",
+          where: {
+            event_id: {
+              [Op.in]: eventIds,
+            },
+          },
+          attributes: [],
+        },
+      ],
+      group: [sequelize.literal(groupByClause)],
+      order: [[sequelize.literal(groupByClause), "ASC"]],
+      raw: true,
+    });
+
+    // Top performing events
+    const topEvents = await Payment.findAll({
+      attributes: [
+        [sequelize.fn("SUM", sequelize.col("organizer_share")), "totalRevenue"],
+        [
+          sequelize.fn("COUNT", sequelize.col("Payment.id")),
+          "transactionCount",
+        ],
+      ],
+      where: {
+        status: "completed",
+        ...dateFilter,
+      },
+      include: [
+        {
+          model: TicketPurchase,
+          as: "purchase",
+          where: {
+            event_id: {
+              [Op.in]: eventIds,
+            },
+          },
+          include: [
+            {
+              model: Event,
+              as: "event",
+              attributes: ["event_name"],
+            },
+          ],
+          attributes: [],
+        },
+      ],
+      group: ["purchase.event_id", "purchase.event.event_name"],
+      order: [[sequelize.fn("SUM", sequelize.col("organizer_share")), "DESC"]],
+      limit: 10,
+      raw: true,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        period,
+        dateRange: {
+          start: startDate ? new Date(startDate).toISOString() : null,
+          end: endDate
+            ? new Date(endDate + "T23:59:59.999Z").toISOString()
+            : null,
+        },
+        revenueByPeriod,
+        topEvents,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching revenue analytics:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching revenue analytics",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -508,6 +784,8 @@ module.exports = {
   approveOrganizer,
   suspendOrganizer,
   getDashboardStats,
+  getEventsAnalytics,
+  getRevenueAnalytics,
   deleteOrganizer,
   forgotPassword,
 };

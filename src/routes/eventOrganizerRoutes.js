@@ -9,6 +9,8 @@ const {
   approveOrganizer,
   suspendOrganizer,
   getDashboardStats,
+  getEventsAnalytics,
+  getRevenueAnalytics,
   deleteOrganizer,
   forgotPassword,
 } = require("../controllers/eventOrganizerController");
@@ -55,6 +57,18 @@ router.get(
   authenticateOrganizer,
   verifyOrganizerOwnership("id"),
   getDashboardStats
+);
+router.get(
+  "/:id/analytics/events",
+  authenticateOrganizer,
+  verifyOrganizerOwnership("id"),
+  getEventsAnalytics
+);
+router.get(
+  "/:id/analytics/revenue",
+  authenticateOrganizer,
+  verifyOrganizerOwnership("id"),
+  getRevenueAnalytics
 );
 
 // Error handling middleware
