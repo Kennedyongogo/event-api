@@ -63,7 +63,6 @@ module.exports = (sequelize) => {
           "pending",
           "approved",
           "rejected",
-          "active",
           "completed",
           "cancelled"
         ),

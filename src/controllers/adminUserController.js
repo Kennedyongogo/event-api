@@ -6,10 +6,10 @@ const {
   PublicUser,
   TicketPurchase,
 } = require("../models");
+const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const config = require("../config/config");
-const { Op } = require("sequelize");
 const { sequelize } = require("../models");
 
 // Create admin user
@@ -240,19 +240,49 @@ const updateProfile = async (req, res) => {
 // Get platform dashboard stats
 const getDashboardStats = async (req, res) => {
   try {
-    // Get counts
-    const totalOrganizers = await EventOrganizer.count();
-    const pendingOrganizers = await EventOrganizer.count({
-      where: { status: "pending" },
+    // Get date range from query parameters
+    const { startDate, endDate } = req.query;
+
+    // Build date filter for createdAt fields
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          [Op.between]: [
+            new Date(startDate),
+            new Date(endDate + "T23:59:59.999Z"),
+          ],
+        },
+      };
+    }
+
+    // Get counts with date filtering
+    const totalOrganizers = await EventOrganizer.count({
+      where: dateFilter,
     });
-    const totalEvents = await Event.count();
-    const pendingEvents = await Event.count({ where: { status: "pending" } });
-    const activeEvents = await Event.count({ where: { status: "active" } });
+    const pendingOrganizers = await EventOrganizer.count({
+      where: {
+        status: "pending",
+        ...dateFilter,
+      },
+    });
+    const totalEvents = await Event.count({
+      where: dateFilter,
+    });
+    const pendingEvents = await Event.count({
+      where: {
+        status: "pending",
+        ...dateFilter,
+      },
+    });
     const totalTicketsSold = await TicketPurchase.count({
-      where: { status: "paid" },
+      where: {
+        status: "paid",
+        ...dateFilter,
+      },
     });
 
-    // Calculate revenue
+    // Calculate revenue with date filtering
     const revenueData = await Payment.findAll({
       attributes: [
         [sequelize.fn("SUM", sequelize.col("amount")), "totalRevenue"],
@@ -262,7 +292,10 @@ const getDashboardStats = async (req, res) => {
           "organizerRevenue",
         ],
       ],
-      where: { status: "completed" },
+      where: {
+        status: "completed",
+        ...dateFilter,
+      },
       raw: true,
     });
 
@@ -272,11 +305,12 @@ const getDashboardStats = async (req, res) => {
       organizerRevenue: 0,
     };
 
-    // Get recent activities
+    // Get recent activities with date filtering
     const recentEvents = await Event.findAll({
       limit: 5,
       order: [["createdAt", "DESC"]],
       attributes: ["id", "event_name", "status", "createdAt"],
+      where: dateFilter,
       include: [
         {
           model: EventOrganizer,
@@ -297,6 +331,7 @@ const getDashboardStats = async (req, res) => {
         "buyer_name",
         "buyer_email",
       ],
+      where: dateFilter,
       include: [
         {
           model: Event,
@@ -309,12 +344,17 @@ const getDashboardStats = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
+        dateRange: {
+          start: startDate ? new Date(startDate).toISOString() : null,
+          end: endDate
+            ? new Date(endDate + "T23:59:59.999Z").toISOString()
+            : null,
+        },
         stats: {
           totalOrganizers,
           pendingOrganizers,
           totalEvents,
           pendingEvents,
-          activeEvents,
           totalTicketsSold,
         },
         revenue: {
@@ -374,11 +414,18 @@ const getRevenueAnalytics = async (req, res) => {
   try {
     const { startDate, endDate, period = "month" } = req.query;
 
-    // Set default date range if not provided
-    const start = startDate
-      ? new Date(startDate)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const end = endDate ? new Date(endDate) : new Date();
+    // Build date filter - only apply if dates are provided
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          [Op.between]: [
+            new Date(startDate),
+            new Date(endDate + "T23:59:59.999Z"),
+          ],
+        },
+      };
+    }
 
     // Revenue by period (daily, weekly, monthly) - PostgreSQL compatible
     let groupBy;
@@ -417,9 +464,7 @@ const getRevenueAnalytics = async (req, res) => {
       ],
       where: {
         status: "completed",
-        createdAt: {
-          [Op.between]: [start, end],
-        },
+        ...dateFilter,
       },
       group: [groupBy],
       order: [[groupBy, "ASC"]],
@@ -451,9 +496,7 @@ const getRevenueAnalytics = async (req, res) => {
       ],
       where: {
         status: "completed",
-        createdAt: {
-          [Op.between]: [start, end],
-        },
+        ...dateFilter,
       },
       group: ["purchase.event.id"],
       order: [[sequelize.fn("SUM", sequelize.col("amount")), "DESC"]],
@@ -493,9 +536,7 @@ const getRevenueAnalytics = async (req, res) => {
       ],
       where: {
         status: "completed",
-        createdAt: {
-          [Op.between]: [start, end],
-        },
+        ...dateFilter,
       },
       group: ["purchase.event.organizer.id"],
       order: [[sequelize.fn("SUM", sequelize.col("admin_share")), "DESC"]],
@@ -506,7 +547,12 @@ const getRevenueAnalytics = async (req, res) => {
       success: true,
       data: {
         period,
-        dateRange: { start, end },
+        dateRange: {
+          start: startDate ? new Date(startDate).toISOString() : null,
+          end: endDate
+            ? new Date(endDate + "T23:59:59.999Z").toISOString()
+            : null,
+        },
         revenueByPeriod,
         topEvents,
         commissionByOrganizer,
@@ -527,10 +573,18 @@ const getEventAnalytics = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
-    const start = startDate
-      ? new Date(startDate)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const end = endDate ? new Date(endDate) : new Date();
+    // Build date filter - only apply if dates are provided
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          [Op.between]: [
+            new Date(startDate),
+            new Date(endDate + "T23:59:59.999Z"),
+          ],
+        },
+      };
+    }
 
     // Event approval rates - get all statuses with counts
     const eventStatsRaw = await Event.findAll({
@@ -538,11 +592,7 @@ const getEventAnalytics = async (req, res) => {
         "status",
         [sequelize.fn("COUNT", sequelize.col("id")), "count"],
       ],
-      where: {
-        createdAt: {
-          [Op.between]: [start, end],
-        },
-      },
+      where: dateFilter,
       group: ["status"],
       raw: true,
     });
@@ -552,7 +602,6 @@ const getEventAnalytics = async (req, res) => {
       "pending",
       "approved",
       "rejected",
-      "active",
       "completed",
       "cancelled",
     ];
@@ -572,11 +621,7 @@ const getEventAnalytics = async (req, res) => {
         "category",
         [sequelize.fn("COUNT", sequelize.col("id")), "count"],
       ],
-      where: {
-        createdAt: {
-          [Op.between]: [start, end],
-        },
-      },
+      where: dateFilter,
       group: ["category"],
       raw: true,
     });
@@ -617,11 +662,7 @@ const getEventAnalytics = async (req, res) => {
           model: Event,
           as: "event",
           attributes: [],
-          where: {
-            createdAt: {
-              [Op.between]: [start, end],
-            },
-          },
+          where: dateFilter,
         },
       ],
       where: { status: "paid" },
@@ -632,24 +673,23 @@ const getEventAnalytics = async (req, res) => {
     const completedEvents = await Event.count({
       where: {
         status: "completed",
-        createdAt: {
-          [Op.between]: [start, end],
-        },
+        ...dateFilter,
       },
     });
 
     const totalEvents = await Event.count({
-      where: {
-        createdAt: {
-          [Op.between]: [start, end],
-        },
-      },
+      where: dateFilter,
     });
 
     res.status(200).json({
       success: true,
       data: {
-        dateRange: { start, end },
+        dateRange: {
+          start: startDate ? new Date(startDate).toISOString() : null,
+          end: endDate
+            ? new Date(endDate + "T23:59:59.999Z").toISOString()
+            : null,
+        },
         eventStats,
         eventsByCategory,
         avgTicketsPerEvent: {
