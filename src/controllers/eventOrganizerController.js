@@ -4,6 +4,7 @@ const {
   Payment,
   TicketPurchase,
   TicketType,
+  sequelize,
 } = require("../models");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -375,17 +376,59 @@ const suspendOrganizer = async (req, res) => {
 const getDashboardStats = async (req, res) => {
   try {
     const { id } = req.params;
+    const { startDate, endDate } = req.query;
+
+    // Build date filter for events
+    let eventDateFilter = {};
+    if (startDate && endDate) {
+      eventDateFilter = {
+        createdAt: {
+          [Op.between]: [
+            new Date(startDate),
+            new Date(endDate + "T23:59:59.999Z"),
+          ],
+        },
+      };
+    }
+
+    // Build date filter for payments
+    let paymentDateFilter = {};
+    if (startDate && endDate) {
+      paymentDateFilter = {
+        createdAt: {
+          [Op.between]: [
+            new Date(startDate),
+            new Date(endDate + "T23:59:59.999Z"),
+          ],
+        },
+      };
+    }
 
     const organizer = await EventOrganizer.findByPk(id, {
       include: [
         {
           model: Event,
           as: "events",
+          where: eventDateFilter,
+          required: false,
           include: [
             {
-              model: Payment,
-              as: "payments",
-              attributes: ["organizer_share", "admin_share", "amount"],
+              model: TicketPurchase,
+              as: "purchases",
+              where: { status: "paid" },
+              required: false,
+              include: [
+                {
+                  model: Payment,
+                  as: "payment",
+                  where: {
+                    status: "completed",
+                    ...paymentDateFilter,
+                  },
+                  required: false,
+                  attributes: ["organizer_share", "admin_share", "amount"],
+                },
+              ],
             },
           ],
         },
@@ -413,9 +456,11 @@ const getDashboardStats = async (req, res) => {
 
     let totalRevenue = 0;
     organizer.events.forEach((event) => {
-      if (event.payments) {
-        event.payments.forEach((payment) => {
-          totalRevenue += parseFloat(payment.organizer_share || 0);
+      if (event.purchases) {
+        event.purchases.forEach((purchase) => {
+          if (purchase.payment) {
+            totalRevenue += parseFloat(purchase.payment.organizer_share || 0);
+          }
         });
       }
     });
@@ -423,6 +468,10 @@ const getDashboardStats = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
+        dateRange: {
+          start: startDate ? new Date(startDate).toISOString() : null,
+          end: endDate ? new Date(endDate).toISOString() : null,
+        },
         totalEvents,
         approvedEvents,
         completedEvents,
@@ -556,15 +605,45 @@ const getEventsAnalytics = async (req, res) => {
 
     // Calculate analytics
     const totalEvents = events.length;
-    const eventsByStatus = events.reduce((acc, event) => {
-      acc[event.status] = (acc[event.status] || 0) + 1;
-      return acc;
-    }, {});
 
-    const eventsByCategory = events.reduce((acc, event) => {
-      acc[event.category] = (acc[event.category] || 0) + 1;
-      return acc;
-    }, {});
+    // Define all possible event statuses
+    const allStatuses = [
+      "pending",
+      "approved",
+      "rejected",
+      "completed",
+      "cancelled",
+    ];
+
+    // Define all possible event categories
+    const allCategories = [
+      "Conference",
+      "Concert",
+      "Sports",
+      "Workshop",
+      "Seminar",
+      "Festival",
+      "Exhibition",
+      "Other",
+    ];
+
+    // Create complete status array with zero counts for missing statuses
+    const eventsByStatus = allStatuses.map((status) => {
+      const found = events.find((event) => event.status === status);
+      return {
+        status,
+        count: found ? 1 : 0,
+      };
+    });
+
+    // Create complete category array with zero counts for missing categories
+    const eventsByCategory = allCategories.map((category) => {
+      const found = events.find((event) => event.category === category);
+      return {
+        category,
+        count: found ? 1 : 0,
+      };
+    });
 
     // Calculate total tickets sold and revenue
     let totalTicketsSold = 0;
@@ -607,8 +686,14 @@ const getEventsAnalytics = async (req, res) => {
             : null,
         },
         totalEvents,
-        eventsByStatus,
-        eventsByCategory,
+        eventsByStatus: eventsByStatus.map((item) => ({
+          status: item.status,
+          count: item.count.toString(),
+        })),
+        eventsByCategory: eventsByCategory.map((item) => ({
+          category: item.category,
+          count: item.count.toString(),
+        })),
         totalTicketsSold,
         totalRevenue: totalRevenue.toFixed(2),
         avgTicketsPerEvent:
@@ -666,16 +751,16 @@ const getRevenueAnalytics = async (req, res) => {
     let groupByClause;
     switch (period) {
       case "day":
-        groupByClause = 'DATE(p."createdAt")';
+        groupByClause = 'DATE("Payment"."createdAt")';
         break;
       case "week":
-        groupByClause = 'EXTRACT(WEEK FROM p."createdAt")';
+        groupByClause = 'EXTRACT(WEEK FROM "Payment"."createdAt")';
         break;
       case "month":
-        groupByClause = 'EXTRACT(MONTH FROM p."createdAt")';
+        groupByClause = 'EXTRACT(MONTH FROM "Payment"."createdAt")';
         break;
       default:
-        groupByClause = 'EXTRACT(MONTH FROM p."createdAt")';
+        groupByClause = 'EXTRACT(MONTH FROM "Payment"."createdAt")';
     }
 
     const revenueByPeriod = await Payment.findAll({
@@ -713,43 +798,45 @@ const getRevenueAnalytics = async (req, res) => {
       raw: true,
     });
 
-    // Top performing events
-    const topEvents = await Payment.findAll({
-      attributes: [
-        [sequelize.fn("SUM", sequelize.col("organizer_share")), "totalRevenue"],
-        [
-          sequelize.fn("COUNT", sequelize.col("Payment.id")),
-          "transactionCount",
-        ],
-      ],
-      where: {
-        status: "completed",
-        ...dateFilter,
-      },
-      include: [
-        {
-          model: TicketPurchase,
-          as: "purchase",
-          where: {
-            event_id: {
-              [Op.in]: eventIds,
-            },
-          },
-          include: [
-            {
-              model: Event,
-              as: "event",
-              attributes: ["event_name"],
-            },
-          ],
-          attributes: [],
-        },
-      ],
-      group: ["purchase.event_id", "purchase.event.event_name"],
-      order: [[sequelize.fn("SUM", sequelize.col("organizer_share")), "DESC"]],
-      limit: 10,
-      raw: true,
+    // Top performing events - using raw SQL for better control
+    const eventIdsPlaceholder = eventIds
+      .map((_, index) => `:eventId${index}`)
+      .join(",");
+    const eventIdsParams = {};
+    eventIds.forEach((id, index) => {
+      eventIdsParams[`eventId${index}`] = id;
     });
+
+    const topEvents = await sequelize.query(
+      `
+      SELECT 
+        e.event_name,
+        SUM(p.organizer_share) as "totalRevenue",
+        COUNT(p.id) as "transactionCount"
+      FROM "ticket_purchases" tp
+      INNER JOIN "payments" p ON tp.id = p.purchase_id
+      INNER JOIN "events" e ON tp.event_id = e.id
+      WHERE tp.event_id IN (${eventIdsPlaceholder})
+        AND tp.status = 'paid'
+        AND p.status = 'completed'
+        ${
+          startDate && endDate
+            ? `AND p."createdAt" BETWEEN :startDate AND :endDate`
+            : ""
+        }
+      GROUP BY e.id, e.event_name
+      ORDER BY SUM(p.organizer_share) DESC
+      LIMIT 10
+    `,
+      {
+        replacements: {
+          ...eventIdsParams,
+          startDate: startDate ? new Date(startDate) : null,
+          endDate: endDate ? new Date(endDate + "T23:59:59.999Z") : null,
+        },
+        type: sequelize.QueryTypes.SELECT,
+      }
+    );
 
     res.status(200).json({
       success: true,
