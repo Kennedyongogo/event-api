@@ -275,13 +275,14 @@ const getAllPayments = async (req, res) => {
         {
           model: TicketPurchase,
           as: "purchase",
-          attributes: ["id", "quantity", "total_amount"],
+          attributes: [
+            "id",
+            "quantity",
+            "total_amount",
+            "buyer_name",
+            "buyer_email",
+          ],
           include: [
-            {
-              model: PublicUser,
-              as: "user",
-              attributes: ["full_name", "email"],
-            },
             {
               model: Event,
               as: "event",
@@ -323,12 +324,15 @@ const getPaymentById = async (req, res) => {
         {
           model: TicketPurchase,
           as: "purchase",
+          attributes: [
+            "id",
+            "quantity",
+            "total_amount",
+            "buyer_name",
+            "buyer_email",
+            "buyer_phone",
+          ],
           include: [
-            {
-              model: PublicUser,
-              as: "user",
-              attributes: ["full_name", "email", "phone"],
-            },
             {
               model: Event,
               as: "event",

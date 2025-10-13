@@ -8,17 +8,23 @@ const {
 } = require("../models");
 const { sequelize } = require("../models");
 
-// Create ticket purchase (initiate)
+// Create ticket purchase (initiate) - Anonymous (no login required)
 const createPurchase = async (req, res) => {
   try {
-    const { user_id, event_id, ticket_type_id, quantity } = req.body;
+    const {
+      event_id,
+      ticket_type_id,
+      quantity,
+      buyer_name,
+      buyer_email,
+      buyer_phone,
+    } = req.body;
 
-    // Verify user exists
-    const user = await PublicUser.findByPk(user_id);
-    if (!user) {
-      return res.status(404).json({
+    // Validate buyer information
+    if (!buyer_name || !buyer_email || !buyer_phone) {
+      return res.status(400).json({
         success: false,
-        message: "User not found",
+        message: "Buyer name, email, and phone are required",
       });
     }
 
@@ -64,9 +70,12 @@ const createPurchase = async (req, res) => {
     // Calculate total amount
     const total_amount = ticketType.price * quantity;
 
-    // Create purchase record
+    // Create purchase record with buyer info (no user_id needed)
     const purchase = await TicketPurchase.create({
-      user_id,
+      user_id: null, // Anonymous purchase
+      buyer_name,
+      buyer_email,
+      buyer_phone,
       event_id,
       ticket_type_id,
       quantity,
@@ -88,6 +97,8 @@ const createPurchase = async (req, res) => {
         quantity,
         ticket_type: ticketType.name,
         event: event.event_name,
+        buyer_name,
+        buyer_email,
       },
     });
   } catch (error) {
@@ -125,11 +136,6 @@ const getAllPurchases = async (req, res) => {
     const purchases = await TicketPurchase.findAll({
       where: whereClause,
       include: [
-        {
-          model: PublicUser,
-          as: "user",
-          attributes: ["full_name", "email", "phone"],
-        },
         {
           model: Event,
           as: "event",
@@ -177,11 +183,6 @@ const getPurchaseById = async (req, res) => {
     const purchase = await TicketPurchase.findByPk(id, {
       include: [
         {
-          model: PublicUser,
-          as: "user",
-          attributes: ["full_name", "email", "phone"],
-        },
-        {
           model: Event,
           as: "event",
           attributes: [
@@ -225,13 +226,20 @@ const getPurchaseById = async (req, res) => {
   }
 };
 
-// Get user's purchases
-const getUserPurchases = async (req, res) => {
+// Get purchases by email (for anonymous users to retrieve their tickets)
+const getPurchasesByEmail = async (req, res) => {
   try {
-    const { user_id } = req.params;
+    const { email } = req.query;
     const { status } = req.query;
 
-    const whereClause = { user_id };
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const whereClause = { buyer_email: email };
     if (status) {
       whereClause.status = status;
     }
@@ -270,10 +278,10 @@ const getUserPurchases = async (req, res) => {
       count: purchases.length,
     });
   } catch (error) {
-    console.error("Error fetching user purchases:", error);
+    console.error("Error fetching purchases by email:", error);
     res.status(500).json({
       success: false,
-      message: "Error fetching user purchases",
+      message: "Error fetching purchases",
       error: error.message,
     });
   }
@@ -439,7 +447,7 @@ module.exports = {
   createPurchase,
   getAllPurchases,
   getPurchaseById,
-  getUserPurchases,
+  getPurchasesByEmail,
   updatePurchaseStatus,
   cancelPurchase,
   generateQRCode,

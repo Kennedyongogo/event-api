@@ -11,6 +11,19 @@ module.exports = (sequelize) => {
       },
       user_id: {
         type: DataTypes.UUID,
+        allowNull: true, // Now optional since public users don't register
+      },
+      // Buyer information (for anonymous purchases)
+      buyer_name: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
+      buyer_email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
+      buyer_phone: {
+        type: DataTypes.STRING,
         allowNull: false,
       },
       event_id: {

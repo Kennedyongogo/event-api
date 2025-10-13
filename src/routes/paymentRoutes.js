@@ -9,24 +9,16 @@ const {
   getRevenueAnalytics,
   refundPayment,
 } = require("../controllers/paymentController");
-const {
-  authenticatePublicUser,
-  authenticateAdmin,
-  authenticateToken,
-} = require("../middleware/auth");
+const { authenticateAdmin } = require("../middleware/auth");
 const { errorHandler } = require("../middleware/errorHandler");
 
-// Public routes (Pesapal callback)
-router.post("/callback", paymentCallback);
-
-// Mock payment routes (for testing)
+// Public routes (no authentication required)
+router.post("/callback", paymentCallback); // Pesapal callback
 router.post("/mock-pay/:id", mockPayment); // Simulate payment completion
+router.post("/initiate", initiatePayment); // Initiate payment (anonymous)
+router.get("/:id", getPaymentById); // Get payment by ID
 
-// Protected routes - Public user or authenticated
-router.post("/initiate", authenticatePublicUser, initiatePayment);
-router.get("/:id", authenticateToken, getPaymentById);
-
-// Protected routes - Admin
+// Protected routes - Admin only
 router.get("/", authenticateAdmin, getAllPayments);
 router.get("/analytics/revenue", authenticateAdmin, getRevenueAnalytics);
 router.post("/:id/refund", authenticateAdmin, refundPayment);

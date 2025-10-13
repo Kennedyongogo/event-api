@@ -248,7 +248,6 @@ const getDashboardStats = async (req, res) => {
     const totalEvents = await Event.count();
     const pendingEvents = await Event.count({ where: { status: "pending" } });
     const activeEvents = await Event.count({ where: { status: "active" } });
-    const totalUsers = await PublicUser.count();
     const totalTicketsSold = await TicketPurchase.count({
       where: { status: "paid" },
     });
@@ -290,13 +289,15 @@ const getDashboardStats = async (req, res) => {
     const recentPurchases = await TicketPurchase.findAll({
       limit: 5,
       order: [["createdAt", "DESC"]],
-      attributes: ["id", "total_amount", "status", "createdAt"],
+      attributes: [
+        "id",
+        "total_amount",
+        "status",
+        "createdAt",
+        "buyer_name",
+        "buyer_email",
+      ],
       include: [
-        {
-          model: PublicUser,
-          as: "user",
-          attributes: ["full_name", "email"],
-        },
         {
           model: Event,
           as: "event",
@@ -314,7 +315,6 @@ const getDashboardStats = async (req, res) => {
           totalEvents,
           pendingEvents,
           activeEvents,
-          totalUsers,
           totalTicketsSold,
         },
         revenue: {
@@ -380,18 +380,24 @@ const getRevenueAnalytics = async (req, res) => {
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
-    // Revenue by period (daily, weekly, monthly)
+    // Revenue by period (daily, weekly, monthly) - PostgreSQL compatible
     let groupBy;
     switch (period) {
       case "day":
         groupBy = sequelize.fn("DATE", sequelize.col("createdAt"));
         break;
       case "week":
-        groupBy = sequelize.fn("WEEK", sequelize.col("createdAt"));
+        groupBy = sequelize.fn(
+          "EXTRACT",
+          sequelize.literal('WEEK FROM "createdAt"')
+        );
         break;
       case "month":
       default:
-        groupBy = sequelize.fn("MONTH", sequelize.col("createdAt"));
+        groupBy = sequelize.fn(
+          "EXTRACT",
+          sequelize.literal('MONTH FROM "createdAt"')
+        );
         break;
     }
 
@@ -404,7 +410,10 @@ const getRevenueAnalytics = async (req, res) => {
           sequelize.fn("SUM", sequelize.col("organizer_share")),
           "organizerRevenue",
         ],
-        [sequelize.fn("COUNT", sequelize.col("id")), "transactionCount"],
+        [
+          sequelize.fn("COUNT", sequelize.col("Payment.id")),
+          "transactionCount",
+        ],
       ],
       where: {
         status: "completed",
@@ -421,7 +430,10 @@ const getRevenueAnalytics = async (req, res) => {
     const topEvents = await Payment.findAll({
       attributes: [
         [sequelize.fn("SUM", sequelize.col("amount")), "totalRevenue"],
-        [sequelize.fn("COUNT", sequelize.col("id")), "transactionCount"],
+        [
+          sequelize.fn("COUNT", sequelize.col("Payment.id")),
+          "transactionCount",
+        ],
       ],
       include: [
         {
@@ -453,7 +465,10 @@ const getRevenueAnalytics = async (req, res) => {
     const commissionByOrganizer = await Payment.findAll({
       attributes: [
         [sequelize.fn("SUM", sequelize.col("admin_share")), "totalCommission"],
-        [sequelize.fn("COUNT", sequelize.col("id")), "transactionCount"],
+        [
+          sequelize.fn("COUNT", sequelize.col("Payment.id")),
+          "transactionCount",
+        ],
       ],
       include: [
         {
@@ -517,8 +532,8 @@ const getEventAnalytics = async (req, res) => {
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
-    // Event approval rates
-    const eventStats = await Event.findAll({
+    // Event approval rates - get all statuses with counts
+    const eventStatsRaw = await Event.findAll({
       attributes: [
         "status",
         [sequelize.fn("COUNT", sequelize.col("id")), "count"],
@@ -532,8 +547,27 @@ const getEventAnalytics = async (req, res) => {
       raw: true,
     });
 
-    // Events by category
-    const eventsByCategory = await Event.findAll({
+    // Define all possible event statuses
+    const allStatuses = [
+      "pending",
+      "approved",
+      "rejected",
+      "active",
+      "completed",
+      "cancelled",
+    ];
+
+    // Create complete status array with zero counts for missing statuses
+    const eventStats = allStatuses.map((status) => {
+      const found = eventStatsRaw.find((item) => item.status === status);
+      return {
+        status,
+        count: found ? found.count : "0",
+      };
+    });
+
+    // Events by category - get all categories with counts
+    const eventsByCategoryRaw = await Event.findAll({
       attributes: [
         "category",
         [sequelize.fn("COUNT", sequelize.col("id")), "count"],
@@ -544,9 +578,33 @@ const getEventAnalytics = async (req, res) => {
         },
       },
       group: ["category"],
-      order: [[sequelize.fn("COUNT", sequelize.col("id")), "DESC"]],
       raw: true,
     });
+
+    // Define all possible event categories
+    const allCategories = [
+      "Conference",
+      "Concert",
+      "Sports",
+      "Workshop",
+      "Seminar",
+      "Festival",
+      "Exhibition",
+      "Other",
+    ];
+
+    // Create complete category array with zero counts for missing categories
+    const eventsByCategory = allCategories
+      .map((category) => {
+        const found = eventsByCategoryRaw.find(
+          (item) => item.category === category
+        );
+        return {
+          category,
+          count: found ? found.count : "0",
+        };
+      })
+      .sort((a, b) => parseInt(b.count) - parseInt(a.count)); // Sort by count descending
 
     // Average tickets sold per event
     const avgTicketsPerEvent = await TicketPurchase.findAll({
@@ -594,9 +652,9 @@ const getEventAnalytics = async (req, res) => {
         dateRange: { start, end },
         eventStats,
         eventsByCategory,
-        avgTicketsPerEvent: avgTicketsPerEvent[0] || {
-          avgTickets: 0,
-          totalTickets: 0,
+        avgTicketsPerEvent: {
+          avgTickets: avgTicketsPerEvent[0]?.avgTickets || 0,
+          totalTickets: avgTicketsPerEvent[0]?.totalTickets || 0,
         },
         completionRate:
           totalEvents > 0
@@ -615,6 +673,7 @@ const getEventAnalytics = async (req, res) => {
 };
 
 // Get user analytics
+// Get buyer analytics (anonymous purchases)
 const getUserAnalytics = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -624,13 +683,15 @@ const getUserAnalytics = async (req, res) => {
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
-    // User registration trends
-    const userRegistrations = await PublicUser.findAll({
+    // Purchase trends by date
+    const purchaseTrends = await TicketPurchase.findAll({
       attributes: [
         [sequelize.fn("DATE", sequelize.col("createdAt")), "date"],
         [sequelize.fn("COUNT", sequelize.col("id")), "count"],
+        [sequelize.fn("SUM", sequelize.col("total_amount")), "revenue"],
       ],
       where: {
+        status: "paid",
         createdAt: {
           [Op.between]: [start, end],
         },
@@ -640,33 +701,22 @@ const getUserAnalytics = async (req, res) => {
       raw: true,
     });
 
-    // User activity (users who made purchases)
-    const activeUsers = await TicketPurchase.count({
+    // Total unique buyers (by email)
+    const uniqueBuyers = await TicketPurchase.count({
       distinct: true,
-      col: "user_id",
+      col: "buyer_email",
       where: {
         status: "paid",
-        createdAt: {
-          [Op.between]: [start, end],
-        },
       },
     });
 
-    // Total registered users
-    const totalUsers = await PublicUser.count();
-
-    // User purchase patterns
-    const purchasePatterns = await TicketPurchase.findAll({
+    // Top buyers by purchase count
+    const topBuyers = await TicketPurchase.findAll({
       attributes: [
+        "buyer_email",
+        "buyer_name",
         [sequelize.fn("COUNT", sequelize.col("id")), "purchaseCount"],
         [sequelize.fn("SUM", sequelize.col("total_amount")), "totalSpent"],
-      ],
-      include: [
-        {
-          model: PublicUser,
-          as: "user",
-          attributes: ["id"],
-        },
       ],
       where: {
         status: "paid",
@@ -674,47 +724,37 @@ const getUserAnalytics = async (req, res) => {
           [Op.between]: [start, end],
         },
       },
-      group: ["user_id"],
+      group: ["buyer_email", "buyer_name"],
       order: [[sequelize.fn("COUNT", sequelize.col("id")), "DESC"]],
       limit: 10,
       raw: true,
     });
 
-    // Geographic distribution (by county)
-    const userByCounty = await PublicUser.findAll({
-      attributes: [
-        "county",
-        [sequelize.fn("COUNT", sequelize.col("id")), "count"],
-      ],
+    // Total purchases in date range
+    const totalPurchases = await TicketPurchase.count({
       where: {
-        county: { [Op.ne]: null },
+        status: "paid",
         createdAt: {
           [Op.between]: [start, end],
         },
       },
-      group: ["county"],
-      order: [[sequelize.fn("COUNT", sequelize.col("id")), "DESC"]],
-      raw: true,
     });
 
     res.status(200).json({
       success: true,
       data: {
         dateRange: { start, end },
-        userRegistrations,
-        activeUsers,
-        totalUsers,
-        purchasePatterns,
-        userByCounty,
-        activityRate:
-          totalUsers > 0 ? ((activeUsers / totalUsers) * 100).toFixed(2) : 0,
+        purchaseTrends,
+        uniqueBuyers,
+        topBuyers,
+        totalPurchases,
       },
     });
   } catch (error) {
-    console.error("Error fetching user analytics:", error);
+    console.error("Error fetching buyer analytics:", error);
     res.status(500).json({
       success: false,
-      message: "Error fetching user analytics",
+      message: "Error fetching buyer analytics",
       error: error.message,
     });
   }

@@ -4,6 +4,7 @@ const {
   createEvent,
   getAllEvents,
   getPublicEvents,
+  getPublicEventById,
   getEventById,
   updateEvent,
   approveEvent,
@@ -23,7 +24,7 @@ const { errorHandler } = require("../middleware/errorHandler");
 
 // Public routes
 router.get("/public", optionalAuth, getPublicEvents);
-router.get("/public/:id", optionalAuth, getEventById);
+router.get("/public/:id", optionalAuth, getPublicEventById);
 
 // Protected routes - Organizer
 router.post(
