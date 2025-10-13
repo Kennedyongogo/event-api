@@ -12,6 +12,10 @@ const {
   getEventAnalytics,
   getUserAnalytics,
   getSystemAnalytics,
+  getCronStatus,
+  triggerEventStatusCron,
+  startCronJobs,
+  stopCronJobs,
 } = require("../controllers/adminUserController");
 const { authenticateAdmin, requireSuperAdmin } = require("../middleware/auth");
 const {
@@ -38,6 +42,17 @@ router.get("/analytics/revenue", authenticateAdmin, getRevenueAnalytics);
 router.get("/analytics/events", authenticateAdmin, getEventAnalytics);
 router.get("/analytics/users", authenticateAdmin, getUserAnalytics);
 router.get("/analytics/system", authenticateAdmin, getSystemAnalytics);
+
+// Cron job management routes
+router.get("/cron/status", authenticateAdmin, getCronStatus);
+router.post(
+  "/cron/trigger/event-status",
+  authenticateAdmin,
+  triggerEventStatusCron
+);
+router.post("/cron/start", authenticateAdmin, startCronJobs);
+router.post("/cron/stop", authenticateAdmin, stopCronJobs);
+
 router.get("/", authenticateAdmin, getAllAdmins);
 router.get("/:id", authenticateAdmin, getAdminById);
 router.put(

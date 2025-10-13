@@ -120,6 +120,11 @@ const initializeApp = async () => {
 
     await initializeModels();
     setupAssociations();
+
+    // Initialize cron jobs
+    const cronManager = require("./services/cronManager");
+    cronManager.initialize();
+
     console.log("✅ Application initialized successfully");
     return true;
   } catch (error) {

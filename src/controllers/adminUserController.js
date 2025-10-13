@@ -8,6 +8,7 @@ const {
 } = require("../models");
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
+const cronManager = require("../services/cronManager");
 const jwt = require("jsonwebtoken");
 const config = require("../config/config");
 const { sequelize } = require("../models");
@@ -886,6 +887,93 @@ const getSystemAnalytics = async (req, res) => {
   }
 };
 
+// Cron Job Management Functions
+
+/**
+ * Get cron job status
+ */
+const getCronStatus = async (req, res) => {
+  try {
+    const status = cronManager.getStatus();
+
+    res.status(200).json({
+      success: true,
+      data: status,
+    });
+  } catch (error) {
+    console.error("Error getting cron status:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error getting cron status",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Manually trigger event status cron job
+ */
+const triggerEventStatusCron = async (req, res) => {
+  try {
+    const result = await cronManager.runCronJob("eventStatus");
+
+    res.status(200).json({
+      success: true,
+      message: "Event status cron job executed successfully",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error triggering event status cron:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error triggering event status cron",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Start all cron jobs
+ */
+const startCronJobs = async (req, res) => {
+  try {
+    cronManager.start();
+
+    res.status(200).json({
+      success: true,
+      message: "All cron jobs started successfully",
+    });
+  } catch (error) {
+    console.error("Error starting cron jobs:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error starting cron jobs",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Stop all cron jobs
+ */
+const stopCronJobs = async (req, res) => {
+  try {
+    cronManager.stop();
+
+    res.status(200).json({
+      success: true,
+      message: "All cron jobs stopped successfully",
+    });
+  } catch (error) {
+    console.error("Error stopping cron jobs:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error stopping cron jobs",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createAdmin,
   login,
@@ -898,4 +986,8 @@ module.exports = {
   getEventAnalytics,
   getUserAnalytics,
   getSystemAnalytics,
+  getCronStatus,
+  triggerEventStatusCron,
+  startCronJobs,
+  stopCronJobs,
 };

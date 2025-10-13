@@ -1,4 +1,4 @@
-const { EventOrganizer, Event, Payment } = require("../models");
+const { EventOrganizer, Event, Payment, TicketPurchase, TicketType } = require("../models");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const config = require("../config/config");
@@ -395,11 +395,14 @@ const getDashboardStats = async (req, res) => {
 
     // Calculate stats
     const totalEvents = organizer.events.length;
-    const activeEvents = organizer.events.filter(
-      (e) => e.status === "active"
+    const approvedEvents = organizer.events.filter(
+      (e) => e.status === "approved"
     ).length;
     const completedEvents = organizer.events.filter(
       (e) => e.status === "completed"
+    ).length;
+    const pendingEvents = organizer.events.filter(
+      (e) => e.status === "pending"
     ).length;
 
     let totalRevenue = 0;
@@ -415,8 +418,9 @@ const getDashboardStats = async (req, res) => {
       success: true,
       data: {
         totalEvents,
-        activeEvents,
+        approvedEvents,
         completedEvents,
+        pendingEvents,
         totalRevenue: totalRevenue.toFixed(2),
         commission_rate: organizer.commission_rate,
       },
