@@ -13,6 +13,7 @@ const {
   getRevenueAnalytics,
   deleteOrganizer,
   forgotPassword,
+  changePassword,
 } = require("../controllers/eventOrganizerController");
 const {
   authenticateOrganizer,
@@ -51,6 +52,12 @@ router.put(
   uploadOrganizerLogo,
   handleUploadError,
   updateProfile
+);
+router.put(
+  "/:id/change-password",
+  authenticateOrganizer,
+  verifyOrganizerOwnership("id"),
+  changePassword
 );
 router.get(
   "/:id/dashboard",

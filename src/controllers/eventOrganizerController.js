@@ -138,7 +138,18 @@ const login = async (req, res) => {
           contact_person: organizer.contact_person,
           email: organizer.email,
           phone_number: organizer.phone_number,
+          address: organizer.address,
+          kra_pin: organizer.kra_pin,
+          pesapal_merchant_ref: organizer.pesapal_merchant_ref,
+          bank_name: organizer.bank_name,
+          bank_account_number: organizer.bank_account_number,
+          website: organizer.website,
+          logo: organizer.logo,
           status: organizer.status,
+          isActive: organizer.isActive,
+          lastLogin: organizer.lastLogin,
+          createdAt: organizer.createdAt,
+          updatedAt: organizer.updatedAt,
         },
       },
     });
@@ -554,6 +565,52 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+// Change password for organizer
+const changePassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { currentPassword, newPassword } = req.body;
+
+    // Find organizer by ID
+    const organizer = await EventOrganizer.findByPk(id);
+    if (!organizer) {
+      return res.status(404).json({
+        success: false,
+        message: "Organizer not found",
+      });
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      organizer.password
+    );
+    if (!isCurrentPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password is incorrect",
+      });
+    }
+
+    // Hash new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    await organizer.update({ password: hashedNewPassword });
+
+    res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+    });
+  } catch (error) {
+    console.error("Error changing password:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error updating password",
+    });
+  }
+};
+
 // Get organizer events analytics
 const getEventsAnalytics = async (req, res) => {
   try {
@@ -841,7 +898,6 @@ const getRevenueAnalytics = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        period,
         dateRange: {
           start: startDate ? new Date(startDate).toISOString() : null,
           end: endDate
@@ -875,4 +931,5 @@ module.exports = {
   getRevenueAnalytics,
   deleteOrganizer,
   forgotPassword,
+  changePassword,
 };
