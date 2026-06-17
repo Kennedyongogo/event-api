@@ -2,9 +2,7 @@ const {
   TicketPurchase,
   TicketType,
   Event,
-  PublicUser,
   Payment,
-  EventOrganizer,
 } = require("../models");
 const { sequelize } = require("../models");
 

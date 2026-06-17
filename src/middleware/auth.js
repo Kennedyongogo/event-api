@@ -1,11 +1,48 @@
 const jwt = require("jsonwebtoken");
-const { AdminUser, EventOrganizer, PublicUser } = require("../models");
+const { User } = require("../models");
 const config = require("../config/config");
 
-// Authenticate any user type (public, organizer, admin)
+const TYPE_TO_ROLE = {
+  admin: "admin",
+  organizer: "event_organizer",
+  artist: "artist",
+};
+
+const resolveRole = (decoded) =>
+  decoded.role || TYPE_TO_ROLE[decoded.type] || null;
+
+const loadUser = async (decoded) => {
+  const role = resolveRole(decoded);
+  if (!role) return null;
+
+  const user = await User.findByPk(decoded.id, {
+    attributes: { exclude: ["password"] },
+  });
+
+  if (!user || !user.isActive || user.role !== role) {
+    return null;
+  }
+
+  return user;
+};
+
+const attachUser = (req, user) => {
+  req.userId = user.id;
+  req.user = user;
+  req.userType =
+    user.role === "event_organizer"
+      ? "organizer"
+      : user.role === "admin"
+        ? "admin"
+        : user.role;
+  if (user.role === "admin") {
+    req.adminRole = "admin";
+  }
+};
+
 exports.authenticateToken = async (req, res, next) => {
   const authHeader = req.header("Authorization");
-  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
     return res.status(401).json({
@@ -15,53 +52,24 @@ exports.authenticateToken = async (req, res, next) => {
   }
 
   try {
-    // Verify the token
     const decoded = jwt.verify(token, config.jwtSecret);
+    const user = await loadUser(decoded);
 
-    // Determine user type and fetch appropriate user
-    let user = null;
-    let userType = decoded.type || "public";
-
-    if (userType === "admin") {
-      user = await AdminUser.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
-      });
-    } else if (userType === "organizer") {
-      user = await EventOrganizer.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
-      });
-    } else {
-      user = await PublicUser.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
-      });
-    }
-
-    if (!user || !user.isActive) {
+    if (!user) {
       return res.status(403).json({
         success: false,
         message: "Access denied, invalid or inactive user",
       });
     }
 
-    // Attach user info to request
-    req.userId = user.id;
-    req.user = user;
-    req.userType = userType;
-    if (userType === "admin") {
-      req.adminRole = user.role;
-    }
-
+    attachUser(req, user);
     next();
   } catch (error) {
     console.error("Auth error:", error);
-    res.status(400).json({
-      success: false,
-      message: "Invalid token",
-    });
+    res.status(400).json({ success: false, message: "Invalid token" });
   }
 };
 
-// Authenticate only admin users
 exports.authenticateAdmin = async (req, res, next) => {
   const authHeader = req.header("Authorization");
   const token = authHeader && authHeader.split(" ")[1];
@@ -75,41 +83,29 @@ exports.authenticateAdmin = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, config.jwtSecret);
-
-    if (decoded.type !== "admin") {
+    if (resolveRole(decoded) !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Access denied, admin privileges required",
       });
     }
 
-    const admin = await AdminUser.findByPk(decoded.id, {
-      attributes: { exclude: ["password"] },
-    });
-
-    if (!admin || !admin.isActive) {
+    const user = await loadUser(decoded);
+    if (!user) {
       return res.status(403).json({
         success: false,
         message: "Access denied, invalid or inactive admin",
       });
     }
 
-    req.userId = admin.id;
-    req.user = admin;
-    req.userType = "admin";
-    req.adminRole = admin.role;
-
+    attachUser(req, user);
     next();
   } catch (error) {
     console.error("Admin auth error:", error);
-    res.status(400).json({
-      success: false,
-      message: "Invalid token",
-    });
+    res.status(400).json({ success: false, message: "Invalid token" });
   }
 };
 
-// Authenticate only event organizers
 exports.authenticateOrganizer = async (req, res, next) => {
   const authHeader = req.header("Authorization");
   const token = authHeader && authHeader.split(" ")[1];
@@ -123,48 +119,40 @@ exports.authenticateOrganizer = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, config.jwtSecret);
-
-    if (decoded.type !== "organizer") {
+    if (resolveRole(decoded) !== "event_organizer") {
       return res.status(403).json({
         success: false,
         message: "Access denied, organizer privileges required",
       });
     }
 
-    const organizer = await EventOrganizer.findByPk(decoded.id, {
-      attributes: { exclude: ["password"] },
-    });
-
-    if (!organizer || !organizer.isActive) {
+    const user = await loadUser(decoded);
+    if (!user) {
       return res.status(403).json({
         success: false,
         message: "Access denied, invalid or inactive organizer",
       });
     }
 
-    if (organizer.status !== "approved" && organizer.status !== "active") {
+    if (
+      user.organizer_status !== "approved" &&
+      user.organizer_status !== "active"
+    ) {
       return res.status(403).json({
         success: false,
         message: "Access denied, organizer not approved",
       });
     }
 
-    req.userId = organizer.id;
-    req.user = organizer;
-    req.userType = "organizer";
-
+    attachUser(req, user);
     next();
   } catch (error) {
     console.error("Organizer auth error:", error);
-    res.status(400).json({
-      success: false,
-      message: "Invalid token",
-    });
+    res.status(400).json({ success: false, message: "Invalid token" });
   }
 };
 
-// Authenticate only public users
-exports.authenticatePublicUser = async (req, res, next) => {
+exports.authenticateArtist = async (req, res, next) => {
   const authHeader = req.header("Authorization");
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -177,40 +165,29 @@ exports.authenticatePublicUser = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, config.jwtSecret);
-
-    if (decoded.type !== "public") {
+    if (resolveRole(decoded) !== "artist") {
       return res.status(403).json({
         success: false,
-        message: "Access denied, public user required",
+        message: "Access denied, artist privileges required",
       });
     }
 
-    const user = await PublicUser.findByPk(decoded.id, {
-      attributes: { exclude: ["password"] },
-    });
-
-    if (!user || !user.isActive) {
+    const user = await loadUser(decoded);
+    if (!user) {
       return res.status(403).json({
         success: false,
-        message: "Access denied, invalid or inactive user",
+        message: "Access denied, invalid or inactive artist",
       });
     }
 
-    req.userId = user.id;
-    req.user = user;
-    req.userType = "public";
-
+    attachUser(req, user);
     next();
   } catch (error) {
-    console.error("Public user auth error:", error);
-    res.status(400).json({
-      success: false,
-      message: "Invalid token",
-    });
+    console.error("Artist auth error:", error);
+    res.status(400).json({ success: false, message: "Invalid token" });
   }
 };
 
-// Authenticate admin OR organizer (for shared endpoints)
 exports.authenticateAdminOrOrganizer = async (req, res, next) => {
   const authHeader = req.header("Authorization");
   const token = authHeader && authHeader.split(" ")[1];
@@ -224,116 +201,71 @@ exports.authenticateAdminOrOrganizer = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, config.jwtSecret);
+    const role = resolveRole(decoded);
 
-    let user = null;
-    let userType = decoded.type;
-
-    if (userType === "admin") {
-      user = await AdminUser.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
-      });
-      if (user) req.adminRole = user.role;
-    } else if (userType === "organizer") {
-      user = await EventOrganizer.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
-      });
-      if (user && user.status !== "approved" && user.status !== "active") {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied, organizer not approved",
-        });
-      }
-    } else {
+    if (role !== "admin" && role !== "event_organizer") {
       return res.status(403).json({
         success: false,
         message: "Access denied, admin or organizer privileges required",
       });
     }
 
-    if (!user || !user.isActive) {
+    const user = await loadUser(decoded);
+    if (!user) {
       return res.status(403).json({
         success: false,
         message: "Access denied, invalid or inactive user",
       });
     }
 
-    req.userId = user.id;
-    req.user = user;
-    req.userType = userType;
+    if (
+      user.role === "event_organizer" &&
+      user.organizer_status !== "approved" &&
+      user.organizer_status !== "active"
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied, organizer not approved",
+      });
+    }
 
+    attachUser(req, user);
     next();
   } catch (error) {
     console.error("Auth error:", error);
-    res.status(400).json({
-      success: false,
-      message: "Invalid token",
-    });
+    res.status(400).json({ success: false, message: "Invalid token" });
   }
 };
 
-// Optional authentication (for public endpoints that might need user info)
 exports.optionalAuth = async (req, res, next) => {
   const authHeader = req.header("Authorization");
   const token = authHeader && authHeader.split(" ")[1];
 
-  if (!token) {
-    return next(); // Continue without authentication
-  }
+  if (!token) return next();
 
   try {
     const decoded = jwt.verify(token, config.jwtSecret);
-
-    let user = null;
-    let userType = decoded.type || "public";
-
-    if (userType === "admin") {
-      user = await AdminUser.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
-      });
-    } else if (userType === "organizer") {
-      user = await EventOrganizer.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
-      });
-    } else {
-      user = await PublicUser.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
-      });
-    }
-
-    if (user && user.isActive) {
-      req.userId = user.id;
-      req.user = user;
-      req.userType = userType;
-      if (userType === "admin") {
-        req.adminRole = user.role;
-      }
-    }
-
+    const user = await loadUser(decoded);
+    if (user) attachUser(req, user);
     next();
-  } catch (error) {
-    // If token is invalid, continue without authentication
+  } catch {
     next();
   }
 };
 
-// Check if admin has super_admin role
 exports.requireSuperAdmin = (req, res, next) => {
-  if (req.userType !== "admin" || req.adminRole !== "super_admin") {
+  if (req.userType !== "admin") {
     return res.status(403).json({
       success: false,
-      message: "Access denied, super admin privileges required",
+      message: "Access denied, admin privileges required",
     });
   }
   next();
 };
 
-// Verify resource ownership (for organizers accessing their own resources)
-exports.verifyOrganizerOwnership = (resourceIdParam = "organizer_id") => {
+exports.verifyOrganizerOwnership = (resourceIdParam = "id") => {
   return (req, res, next) => {
-    if (req.userType === "admin") {
-      // Admins can access all resources
-      return next();
-    }
+    if (req.userType === "admin") return next();
 
     if (req.userType !== "organizer") {
       return res.status(403).json({
@@ -358,20 +290,23 @@ exports.verifyOrganizerOwnership = (resourceIdParam = "organizer_id") => {
   };
 };
 
-// Verify user owns the resource (for public users)
-exports.verifyUserOwnership = (userIdParam = "user_id") => {
+exports.verifyArtistOwnership = (resourceIdParam = "id") => {
   return (req, res, next) => {
-    if (req.userType === "admin") {
-      // Admins can access all resources
-      return next();
+    if (req.userType === "admin") return next();
+
+    if (req.userType !== "artist") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied, artist privileges required",
+      });
     }
 
-    const resourceUserId =
-      req.params[userIdParam] ||
-      req.body[userIdParam] ||
-      req.query[userIdParam];
+    const resourceOwnerId =
+      req.params[resourceIdParam] ||
+      req.body[resourceIdParam] ||
+      req.query[resourceIdParam];
 
-    if (resourceUserId && resourceUserId !== req.userId) {
+    if (resourceOwnerId && resourceOwnerId !== req.userId) {
       return res.status(403).json({
         success: false,
         message: "Access denied, you can only access your own resources",

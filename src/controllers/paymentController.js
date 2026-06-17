@@ -2,8 +2,7 @@ const {
   Payment,
   TicketPurchase,
   Event,
-  EventOrganizer,
-  PublicUser,
+  User,
   TicketType,
 } = require("../models");
 const { sequelize } = require("../models");
@@ -22,7 +21,7 @@ const initiatePayment = async (req, res) => {
           as: "event",
           include: [
             {
-              model: EventOrganizer,
+              model: User,
               as: "organizer",
             },
           ],
@@ -339,7 +338,7 @@ const getPaymentById = async (req, res) => {
               attributes: ["event_name", "venue", "event_date"],
               include: [
                 {
-                  model: EventOrganizer,
+                  model: User,
                   as: "organizer",
                   attributes: ["organization_name"],
                 },

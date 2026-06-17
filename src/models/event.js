@@ -1,4 +1,5 @@
 const { DataTypes } = require("sequelize");
+const { EVENT_CATEGORIES } = require("../constants/eventCategories");
 
 module.exports = (sequelize) => {
   const Event = sequelize.define(
@@ -22,20 +23,22 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
       category: {
-        type: DataTypes.STRING,
+        type: DataTypes.ENUM(...EVENT_CATEGORIES),
         allowNull: true,
       },
       venue: {
         type: DataTypes.STRING,
         allowNull: false,
       },
-      county: {
-        type: DataTypes.STRING,
+      venue_latitude: {
+        type: DataTypes.DECIMAL(10, 7),
         allowNull: true,
+        comment: "Venue latitude (Y coordinate)",
       },
-      sub_county: {
-        type: DataTypes.STRING,
+      venue_longitude: {
+        type: DataTypes.DECIMAL(10, 7),
         allowNull: true,
+        comment: "Venue longitude (X coordinate)",
       },
       event_date: {
         type: DataTypes.DATE,
@@ -52,6 +55,24 @@ module.exports = (sequelize) => {
       image_url: {
         type: DataTypes.STRING,
         allowNull: true,
+      },
+      lineup: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+        comment: "Manual lineup names, e.g. [{ name, role }]",
+      },
+      tickets_available: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+        comment: "Total tickets available for this event",
+      },
+      ticket_prices: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+        comment: "Ticket tiers, e.g. [{ category: 'VIP', price: 2000, quantity: 50 }]",
       },
       commission_rate: {
         type: DataTypes.DECIMAL(5, 2),

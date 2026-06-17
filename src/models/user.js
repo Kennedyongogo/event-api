@@ -1,26 +1,21 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  const EventOrganizer = sequelize.define(
-    "EventOrganizer",
+  const User = sequelize.define(
+    "User",
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
-      organization_name: {
-        type: DataTypes.STRING,
-        allowNull: false,
-      },
-      contact_person: {
+      full_name: {
         type: DataTypes.STRING,
         allowNull: false,
       },
       email: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true,
         validate: {
           isEmail: true,
         },
@@ -29,9 +24,18 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
-      phone_number: {
+      phone: {
         type: DataTypes.STRING,
+        allowNull: true,
+      },
+      role: {
+        type: DataTypes.ENUM("admin", "event_organizer", "artist"),
         allowNull: false,
+      },
+      // Event organizer fields
+      organization_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
       address: {
         type: DataTypes.STRING,
@@ -53,17 +57,26 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      website: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      logo: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      status: {
+      organizer_status: {
         type: DataTypes.ENUM("pending", "approved", "active", "suspended"),
-        defaultValue: "pending",
+        allowNull: true,
+      },
+      // Artist fields
+      stage_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      bio: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      genre: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      profile_image: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
       isActive: {
         type: DataTypes.BOOLEAN,
@@ -75,10 +88,17 @@ module.exports = (sequelize) => {
       },
     },
     {
-      tableName: "event_organizers",
+      tableName: "users",
       timestamps: true,
+      indexes: [
+        {
+          unique: true,
+          fields: ["email", "role"],
+          name: "users_email_role_unique",
+        },
+      ],
     }
   );
 
-  return EventOrganizer;
+  return User;
 };

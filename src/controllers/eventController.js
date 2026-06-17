@@ -1,11 +1,22 @@
 const {
   Event,
-  EventOrganizer,
+  User,
   TicketType,
   TicketPurchase,
 } = require("../models");
 const { Op } = require("sequelize");
+const { parseLineup } = require("../utils/lineup");
 const { convertToRelativePath } = require("../utils/filePath");
+const {
+  EVENT_CATEGORIES,
+  isValidEventCategory,
+} = require("../constants/eventCategories");
+const {
+  parseTicketPrices,
+  parseVenueCoordinates,
+  parseTicketsAvailable,
+  validateTicketTierQuantities,
+} = require("../utils/ticketPricing");
 
 // Create new event
 const createEvent = async (req, res) => {
@@ -15,30 +26,73 @@ const createEvent = async (req, res) => {
       description,
       category,
       venue,
-      county,
-      sub_county,
+      venue_latitude,
+      venue_longitude,
+      latitude,
+      longitude,
       event_date,
       start_time,
       end_time,
       commission_rate,
+      lineup,
+      tickets_available,
+      ticket_prices,
     } = req.body;
 
     // Get organizer_id from authenticated user
-    const organizer_id = req.user.id;
+    const organizer_id = req.userId || req.user.id;
 
-    // Verify organizer exists and is approved
-    const organizer = await EventOrganizer.findByPk(organizer_id);
-    if (!organizer) {
+    const organizer = await User.findByPk(organizer_id);
+    if (!organizer || organizer.role !== "event_organizer") {
       return res.status(404).json({
         success: false,
         message: "Organizer not found",
       });
     }
 
-    if (organizer.status !== "approved" && organizer.status !== "active") {
+    if (
+      organizer.organizer_status !== "approved" &&
+      organizer.organizer_status !== "active"
+    ) {
       return res.status(403).json({
         success: false,
         message: "Organizer must be approved to create events",
+      });
+    }
+
+    if (category && !isValidEventCategory(category)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid event category",
+        validCategories: EVENT_CATEGORIES,
+      });
+    }
+
+    const coords = parseVenueCoordinates(
+      venue_latitude ?? latitude,
+      venue_longitude ?? longitude
+    );
+    if (coords.error) {
+      return res.status(400).json({ success: false, message: coords.error });
+    }
+
+    const ticketsParsed = parseTicketsAvailable(tickets_available);
+    if (ticketsParsed?.error) {
+      return res.status(400).json({
+        success: false,
+        message: ticketsParsed.error,
+      });
+    }
+
+    const parsedTicketPrices = parseTicketPrices(ticket_prices);
+    const tierQtyCheck = validateTicketTierQuantities(
+      ticketsParsed?.tickets_available ?? 0,
+      parsedTicketPrices
+    );
+    if (tierQtyCheck?.error) {
+      return res.status(400).json({
+        success: false,
+        message: tierQtyCheck.error,
       });
     }
 
@@ -50,16 +104,19 @@ const createEvent = async (req, res) => {
       organizer_id,
       event_name: title,
       description,
-      category,
+      category: category || null,
       venue,
-      county,
-      sub_county,
+      venue_latitude: coords.venue_latitude,
+      venue_longitude: coords.venue_longitude,
       event_date,
       start_time,
       end_time,
       image_url,
-      commission_rate: commission_rate || 10.0, // Default 10% commission
-      status: "pending", // Requires admin approval
+      commission_rate: commission_rate || 10.0,
+      lineup: parseLineup(lineup),
+      tickets_available: ticketsParsed?.tickets_available ?? 0,
+      ticket_prices: parsedTicketPrices,
+      status: "pending",
     });
 
     res.status(201).json({
@@ -80,8 +137,7 @@ const createEvent = async (req, res) => {
 // Get all events (with filters)
 const getAllEvents = async (req, res) => {
   try {
-    const { page, limit, status, category, county, organizer_id, search } =
-      req.query;
+    const { page, limit, status, category, organizer_id, search } = req.query;
 
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 10;
@@ -90,8 +146,8 @@ const getAllEvents = async (req, res) => {
     const whereClause = {};
 
     // If user is an organizer, only show their events
-    if (req.user.type === "organizer") {
-      whereClause.organizer_id = req.user.id;
+    if (req.userType === "organizer") {
+      whereClause.organizer_id = req.userId || req.user.id;
     }
 
     if (status) {
@@ -100,10 +156,7 @@ const getAllEvents = async (req, res) => {
     if (category) {
       whereClause.category = category;
     }
-    if (county) {
-      whereClause.county = county;
-    }
-    if (organizer_id && req.user.type === "admin") {
+    if (organizer_id && req.userType === "admin") {
       // Only admins can filter by organizer_id
       whereClause.organizer_id = organizer_id;
     }
@@ -121,9 +174,9 @@ const getAllEvents = async (req, res) => {
       where: whereClause,
       include: [
         {
-          model: EventOrganizer,
+          model: User,
           as: "organizer",
-          attributes: ["organization_name", "contact_person", "phone_number"],
+          attributes: ["organization_name", "full_name", "phone"],
         },
         {
           model: TicketType,
@@ -157,7 +210,7 @@ const getAllEvents = async (req, res) => {
 // Get public events (only approved/active)
 const getPublicEvents = async (req, res) => {
   try {
-    const { page, limit, category, county, search } = req.query;
+    const { page, limit, category, search } = req.query;
 
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 10;
@@ -170,9 +223,6 @@ const getPublicEvents = async (req, res) => {
 
     if (category) {
       whereClause.category = category;
-    }
-    if (county) {
-      whereClause.county = county;
     }
     if (search) {
       whereClause[Op.or] = [
@@ -188,7 +238,7 @@ const getPublicEvents = async (req, res) => {
       where: whereClause,
       include: [
         {
-          model: EventOrganizer,
+          model: User,
           as: "organizer",
           attributes: ["organization_name"],
         },
@@ -229,12 +279,12 @@ const getPublicEventById = async (req, res) => {
     const event = await Event.findByPk(id, {
       include: [
         {
-          model: EventOrganizer,
+          model: User,
           as: "organizer",
           attributes: [
             "organization_name",
-            "contact_person",
-            "phone_number",
+            "full_name",
+            "phone",
             "email",
           ],
         },
@@ -290,12 +340,12 @@ const getEventById = async (req, res) => {
     const event = await Event.findByPk(id, {
       include: [
         {
-          model: EventOrganizer,
+          model: User,
           as: "organizer",
           attributes: [
             "organization_name",
-            "contact_person",
-            "phone_number",
+            "full_name",
+            "phone",
             "email",
           ],
         },
@@ -345,15 +395,21 @@ const updateEvent = async (req, res) => {
     const { id } = req.params;
     const {
       event_name,
+      title,
       description,
       category,
       venue,
-      county,
-      sub_county,
+      venue_latitude,
+      venue_longitude,
+      latitude,
+      longitude,
       event_date,
       start_time,
       end_time,
       image_url,
+      lineup,
+      tickets_available,
+      ticket_prices,
     } = req.body;
 
     const event = await Event.findByPk(id);
@@ -364,20 +420,85 @@ const updateEvent = async (req, res) => {
       });
     }
 
+    if (category !== undefined && category !== "" && !isValidEventCategory(category)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid event category",
+        validCategories: EVENT_CATEGORIES,
+      });
+    }
+
+    const hasCoords =
+      venue_latitude !== undefined ||
+      venue_longitude !== undefined ||
+      latitude !== undefined ||
+      longitude !== undefined;
+
+    let coordsUpdate = {};
+    if (hasCoords) {
+      const coords = parseVenueCoordinates(
+        venue_latitude ?? latitude ?? event.venue_latitude,
+        venue_longitude ?? longitude ?? event.venue_longitude
+      );
+      if (coords.error) {
+        return res.status(400).json({ success: false, message: coords.error });
+      }
+      coordsUpdate = {
+        venue_latitude: coords.venue_latitude,
+        venue_longitude: coords.venue_longitude,
+      };
+    }
+
+    let ticketsUpdate = {};
+    if (tickets_available !== undefined) {
+      const ticketsParsed = parseTicketsAvailable(tickets_available);
+      if (ticketsParsed?.error) {
+        return res.status(400).json({
+          success: false,
+          message: ticketsParsed.error,
+        });
+      }
+      ticketsUpdate.tickets_available = ticketsParsed.tickets_available;
+    }
+
+    const nextTicketsAvailable =
+      ticketsUpdate.tickets_available ?? event.tickets_available ?? 0;
+    const nextTicketPrices =
+      ticket_prices !== undefined
+        ? parseTicketPrices(ticket_prices)
+        : event.ticket_prices || [];
+
+    if (ticket_prices !== undefined || tickets_available !== undefined) {
+      const tierQtyCheck = validateTicketTierQuantities(
+        nextTicketsAvailable,
+        nextTicketPrices
+      );
+      if (tierQtyCheck?.error) {
+        return res.status(400).json({
+          success: false,
+          message: tierQtyCheck.error,
+        });
+      }
+    }
+
     // Handle new image upload if provided
     const newImageUrl = convertToRelativePath(req.file?.path);
 
     await event.update({
-      event_name: event_name || event.event_name,
-      description: description || event.description,
-      category: category || event.category,
+      event_name: event_name || title || event.event_name,
+      description: description !== undefined ? description : event.description,
+      category: category !== undefined ? category || null : event.category,
       venue: venue || event.venue,
-      county: county || event.county,
-      sub_county: sub_county || event.sub_county,
+      ...coordsUpdate,
       event_date: event_date || event.event_date,
-      start_time: start_time || event.start_time,
-      end_time: end_time || event.end_time,
-      image_url: newImageUrl || event.image_url,
+      start_time: start_time !== undefined ? start_time : event.start_time,
+      end_time: end_time !== undefined ? end_time : event.end_time,
+      image_url: newImageUrl || image_url || event.image_url,
+      ...(lineup !== undefined ? { lineup: parseLineup(lineup) } : {}),
+      ...ticketsUpdate,
+      ...(ticket_prices !== undefined
+        ? { ticket_prices: nextTicketPrices }
+        : {}),
     });
 
     res.status(200).json({
@@ -521,6 +642,14 @@ const deleteEvent = async (req, res) => {
   }
 };
 
+// List valid event categories (public)
+const getEventCategories = async (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: EVENT_CATEGORIES,
+  });
+};
+
 module.exports = {
   createEvent,
   getAllEvents,
@@ -532,4 +661,5 @@ module.exports = {
   rejectEvent,
   cancelEvent,
   deleteEvent,
+  getEventCategories,
 };

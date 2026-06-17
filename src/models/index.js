@@ -1,35 +1,29 @@
 const { sequelize } = require("../config/database");
 
-// Import all models
-const PublicUser = require("./publicUser")(sequelize);
-const EventOrganizer = require("./eventOrganizer")(sequelize);
-const AdminUser = require("./adminUser")(sequelize);
+const User = require("./user")(sequelize);
 const Event = require("./event")(sequelize);
+const ArtistSchedule = require("./artistSchedule")(sequelize);
 const TicketType = require("./ticketType")(sequelize);
 const TicketPurchase = require("./ticketPurchase")(sequelize);
 const Payment = require("./payment")(sequelize);
 
 const models = {
-  PublicUser,
-  EventOrganizer,
-  AdminUser,
+  User,
   Event,
+  ArtistSchedule,
   TicketType,
   TicketPurchase,
   Payment,
 };
 
-// Initialize models in correct order (parent tables first)
 const initializeModels = async () => {
   try {
     console.log("🔄 Creating/updating tables...");
 
-    // Use alter: false to prevent schema conflicts in production
     console.log("📋 Syncing parent tables...");
-    await PublicUser.sync({ force: false, alter: false });
-    await EventOrganizer.sync({ force: false, alter: false });
-    await AdminUser.sync({ force: false, alter: false });
-    await Event.sync({ force: false, alter: false });
+    await User.sync({ force: false, alter: true });
+    await Event.sync({ force: false, alter: true });
+    await ArtistSchedule.sync({ force: false, alter: true });
 
     console.log("📋 Syncing child tables...");
     await TicketType.sync({ force: false, alter: false });
@@ -39,30 +33,30 @@ const initializeModels = async () => {
     console.log("✅ All models synced successfully");
   } catch (error) {
     console.error("❌ Error syncing models:", error);
-    console.error("❌ Error details:", {
-      name: error.name,
-      message: error.message,
-      parent: error.parent?.message,
-      original: error.original?.message,
-      sql: error.sql,
-    });
     throw error;
   }
 };
 
 const setupAssociations = () => {
   try {
-    // Event Organizer → Event (1:Many)
-    models.EventOrganizer.hasMany(models.Event, {
+    models.User.hasMany(models.Event, {
       foreignKey: "organizer_id",
       as: "events",
     });
-    models.Event.belongsTo(models.EventOrganizer, {
+    models.Event.belongsTo(models.User, {
       foreignKey: "organizer_id",
       as: "organizer",
     });
 
-    // Event → TicketType (1:Many)
+    models.User.hasMany(models.ArtistSchedule, {
+      foreignKey: "artist_id",
+      as: "schedule",
+    });
+    models.ArtistSchedule.belongsTo(models.User, {
+      foreignKey: "artist_id",
+      as: "artist",
+    });
+
     models.Event.hasMany(models.TicketType, {
       foreignKey: "event_id",
       as: "ticketTypes",
@@ -72,17 +66,6 @@ const setupAssociations = () => {
       as: "event",
     });
 
-    // PublicUser → TicketPurchase (1:Many)
-    models.PublicUser.hasMany(models.TicketPurchase, {
-      foreignKey: "user_id",
-      as: "purchases",
-    });
-    models.TicketPurchase.belongsTo(models.PublicUser, {
-      foreignKey: "user_id",
-      as: "user",
-    });
-
-    // Event → TicketPurchase (1:Many)
     models.Event.hasMany(models.TicketPurchase, {
       foreignKey: "event_id",
       as: "purchases",
@@ -92,7 +75,6 @@ const setupAssociations = () => {
       as: "event",
     });
 
-    // TicketType → TicketPurchase (1:Many)
     models.TicketType.hasMany(models.TicketPurchase, {
       foreignKey: "ticket_type_id",
       as: "purchases",
@@ -102,7 +84,6 @@ const setupAssociations = () => {
       as: "ticketType",
     });
 
-    // TicketPurchase → Payment (1:1)
     models.TicketPurchase.hasOne(models.Payment, {
       foreignKey: "purchase_id",
       as: "payment",

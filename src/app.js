@@ -6,33 +6,35 @@ const fs = require("fs");
 const { initializeModels, setupAssociations } = require("./models");
 const { errorHandler } = require("./middleware/errorHandler");
 
-// Import all routes
-const publicUserRoutes = require("./routes/publicUserRoutes");
-const eventOrganizerRoutes = require("./routes/eventOrganizerRoutes");
-const adminUserRoutes = require("./routes/adminUserRoutes");
+const userRoutes = require("./routes/userRoutes");
+const {
+  login,
+  register,
+  forgotPassword,
+  getAllUsers,
+} = require("./controllers/userController");
+const analyticsController = require("./controllers/analyticsController");
+const { authenticateAdmin, requireSuperAdmin } = require("./middleware/auth");
 const eventRoutes = require("./routes/eventRoutes");
 const ticketTypeRoutes = require("./routes/ticketTypeRoutes");
 const ticketPurchaseRoutes = require("./routes/ticketPurchaseRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
+const artistRoutes = require("./routes/artistRoutes");
 
 const app = express();
 
-// Middleware
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cors());
 
-// Debug logging middleware
 app.use((req, res, next) => {
   console.log(`🔍 [${new Date().toISOString()}] ${req.method} ${req.url}`);
-  console.log(`📋 Headers:`, req.headers);
   if (req.body && Object.keys(req.body).length > 0) {
     console.log(`📦 Body:`, req.body);
   }
   next();
 });
 
-// Static file serving for event ticketing system
 const eventsUploadPath = path.join(__dirname, "..", "uploads", "events");
 const organizersUploadPath = path.join(
   __dirname,
@@ -45,25 +47,6 @@ const qrcodesUploadPath = path.join(__dirname, "..", "uploads", "qrcodes");
 const documentsUploadPath = path.join(__dirname, "..", "uploads", "documents");
 const miscUploadPath = path.join(__dirname, "..", "uploads", "misc");
 
-console.log("📁 Events upload path:", eventsUploadPath);
-console.log("📁 Organizers upload path:", organizersUploadPath);
-console.log("📁 Profiles upload path:", profilesUploadPath);
-console.log("📁 QR Codes upload path:", qrcodesUploadPath);
-console.log("📁 Documents upload path:", documentsUploadPath);
-console.log("📁 Misc upload path:", miscUploadPath);
-console.log("📁 Events directory exists:", fs.existsSync(eventsUploadPath));
-console.log(
-  "📁 Organizers directory exists:",
-  fs.existsSync(organizersUploadPath)
-);
-console.log("📁 Profiles directory exists:", fs.existsSync(profilesUploadPath));
-console.log("📁 QR Codes directory exists:", fs.existsSync(qrcodesUploadPath));
-console.log(
-  "📁 Documents directory exists:",
-  fs.existsSync(documentsUploadPath)
-);
-console.log("📁 Misc directory exists:", fs.existsSync(miscUploadPath));
-
 app.use("/uploads/events", express.static(eventsUploadPath));
 app.use("/uploads/organizers", express.static(organizersUploadPath));
 app.use("/uploads/profiles", express.static(profilesUploadPath));
@@ -71,28 +54,84 @@ app.use("/uploads/qrcodes", express.static(qrcodesUploadPath));
 app.use("/uploads/documents", express.static(documentsUploadPath));
 app.use("/uploads/misc", express.static(miscUploadPath));
 
-// API routes
 console.log("🔗 Registering API routes...");
-app.use("/api/public-users", publicUserRoutes);
-console.log("✅ /api/public-users route registered");
-app.use("/api/organizers", eventOrganizerRoutes);
-console.log("✅ /api/organizers route registered");
-app.use("/api/admins", adminUserRoutes);
-console.log("✅ /api/admins route registered");
+app.use("/api/users", userRoutes);
+console.log("✅ /api/users route registered");
+
+// Legacy paths for existing admin & organizer frontends
+app.post("/api/admins/login", (req, res, next) => {
+  req.body.role = "admin";
+  return login(req, res, next);
+});
+app.post("/api/organizers/login", (req, res, next) => {
+  req.body.role = "event_organizer";
+  return login(req, res, next);
+});
+app.post("/api/organizers/register", (req, res, next) => {
+  req.body.role = "event_organizer";
+  return register(req, res, next);
+});
+app.post("/api/organizers/forgot-password", forgotPassword);
+
+app.use("/api/artists", artistRoutes);
+console.log("✅ /api/artists route registered");
+
+// Legacy admin API (event-admin frontend)
+app.get(
+  "/api/admins/dashboard/stats",
+  authenticateAdmin,
+  analyticsController.getDashboardStats
+);
+app.get(
+  "/api/admins/analytics/revenue",
+  authenticateAdmin,
+  analyticsController.getRevenueAnalytics
+);
+app.get(
+  "/api/admins/analytics/events",
+  authenticateAdmin,
+  analyticsController.getEventAnalytics
+);
+app.get(
+  "/api/admins/analytics/users",
+  authenticateAdmin,
+  analyticsController.getUserAnalytics
+);
+app.get(
+  "/api/admins/analytics/system",
+  authenticateAdmin,
+  analyticsController.getSystemAnalytics
+);
+app.get(
+  "/api/admins/cron/status",
+  authenticateAdmin,
+  analyticsController.getCronStatus
+);
+app.post(
+  "/api/admins/cron/trigger/event-status",
+  authenticateAdmin,
+  analyticsController.triggerEventStatusCron
+);
+app.post("/api/admins/cron/start", authenticateAdmin, analyticsController.startCronJobs);
+app.post("/api/admins/cron/stop", authenticateAdmin, analyticsController.stopCronJobs);
+app.get("/api/admins", authenticateAdmin, (req, res, next) => {
+  req.query.role = "admin";
+  return getAllUsers(req, res, next);
+});
+app.get("/api/organizers", authenticateAdmin, (req, res, next) => {
+  req.query.role = "event_organizer";
+  return getAllUsers(req, res, next);
+});
+console.log("✅ Legacy /api/admins and /api/organizers routes registered");
+
 app.use("/api/events", eventRoutes);
-console.log("✅ /api/events route registered");
 app.use("/api/ticket-types", ticketTypeRoutes);
-console.log("✅ /api/ticket-types route registered");
 app.use("/api/purchases", ticketPurchaseRoutes);
-console.log("✅ /api/purchases route registered");
 app.use("/api/payments", paymentRoutes);
-console.log("✅ /api/payments route registered");
 console.log("✅ All API routes registered");
 
-// Error handling middleware
 app.use(errorHandler);
 
-// Create upload directories if they don't exist
 const createUploadDirectories = () => {
   const uploadDirs = [
     path.join(__dirname, "..", "uploads"),
@@ -112,16 +151,12 @@ const createUploadDirectories = () => {
   });
 };
 
-// Initialize models and associations
 const initializeApp = async () => {
   try {
-    // Create upload directories
     createUploadDirectories();
-
     await initializeModels();
     setupAssociations();
 
-    // Initialize cron jobs
     const cronManager = require("./services/cronManager");
     cronManager.initialize();
 
@@ -129,18 +164,10 @@ const initializeApp = async () => {
     return true;
   } catch (error) {
     console.error("❌ Error initializing application:", error);
-    console.error("❌ Full error details:", {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      parent: error.parent?.message,
-      original: error.original?.message,
-    });
     throw error;
   }
 };
 
-// Export the initialization promise
 const appInitialized = initializeApp();
 
 module.exports = { app, appInitialized };

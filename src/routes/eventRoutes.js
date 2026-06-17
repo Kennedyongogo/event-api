@@ -11,6 +11,7 @@ const {
   rejectEvent,
   cancelEvent,
   deleteEvent,
+  getEventCategories,
 } = require("../controllers/eventController");
 const {
   authenticateOrganizer,
@@ -23,6 +24,7 @@ const { uploadEventImage, handleUploadError } = require("../middleware/upload");
 const { errorHandler } = require("../middleware/errorHandler");
 
 // Public routes
+router.get("/categories", getEventCategories);
 router.get("/public", optionalAuth, getPublicEvents);
 router.get("/public/:id", optionalAuth, getPublicEventById);
 
