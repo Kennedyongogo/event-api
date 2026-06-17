@@ -12,8 +12,8 @@ const {
   suspendOrganizer,
   deleteUser,
   forgotPassword,
-  getOrganizerDashboardStats,
 } = require("../controllers/userController");
+const organizerAnalyticsController = require("../controllers/organizerAnalyticsController");
 const {
   getDashboardStats,
   getRevenueAnalytics,
@@ -96,7 +96,19 @@ router.get(
   "/:id/dashboard",
   authenticateOrganizer,
   verifyOrganizerOwnership("id"),
-  getOrganizerDashboardStats
+  organizerAnalyticsController.getOrganizerDashboardStats
+);
+router.get(
+  "/:id/analytics/events",
+  authenticateOrganizer,
+  verifyOrganizerOwnership("id"),
+  organizerAnalyticsController.getOrganizerEventAnalytics
+);
+router.get(
+  "/:id/analytics/revenue",
+  authenticateOrganizer,
+  verifyOrganizerOwnership("id"),
+  organizerAnalyticsController.getOrganizerRevenueAnalytics
 );
 
 router.use(errorHandler);

@@ -14,7 +14,8 @@ const {
   getAllUsers,
 } = require("./controllers/userController");
 const analyticsController = require("./controllers/analyticsController");
-const { authenticateAdmin, requireSuperAdmin } = require("./middleware/auth");
+const organizerAnalyticsController = require("./controllers/organizerAnalyticsController");
+const { authenticateAdmin, authenticateOrganizer, requireSuperAdmin, verifyOrganizerOwnership } = require("./middleware/auth");
 const eventRoutes = require("./routes/eventRoutes");
 const ticketTypeRoutes = require("./routes/ticketTypeRoutes");
 const ticketPurchaseRoutes = require("./routes/ticketPurchaseRoutes");
@@ -122,6 +123,24 @@ app.get("/api/organizers", authenticateAdmin, (req, res, next) => {
   req.query.role = "event_organizer";
   return getAllUsers(req, res, next);
 });
+app.get(
+  "/api/organizers/:id/dashboard",
+  authenticateOrganizer,
+  verifyOrganizerOwnership("id"),
+  organizerAnalyticsController.getOrganizerDashboardStats
+);
+app.get(
+  "/api/organizers/:id/analytics/events",
+  authenticateOrganizer,
+  verifyOrganizerOwnership("id"),
+  organizerAnalyticsController.getOrganizerEventAnalytics
+);
+app.get(
+  "/api/organizers/:id/analytics/revenue",
+  authenticateOrganizer,
+  verifyOrganizerOwnership("id"),
+  organizerAnalyticsController.getOrganizerRevenueAnalytics
+);
 console.log("✅ Legacy /api/admins and /api/organizers routes registered");
 
 app.use("/api/events", eventRoutes);
