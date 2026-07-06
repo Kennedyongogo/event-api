@@ -96,6 +96,7 @@ const setupAssociations = () => {
     console.log("✅ All associations set up successfully");
   } catch (error) {
     console.error("❌ Error during setupAssociations:", error);
+    throw error;
   }
 };
 

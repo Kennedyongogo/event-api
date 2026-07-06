@@ -18,6 +18,44 @@ const {
   validateTicketTierQuantities,
 } = require("../utils/ticketPricing");
 
+const PUBLIC_EVENT_STATUSES = ["approved", "active"];
+
+const attachOrganizersToEvents = async (events) => {
+  const rows = events.map((event) =>
+    typeof event.toJSON === "function" ? event.toJSON() : event
+  );
+  const organizerIds = [
+    ...new Set(rows.map((event) => event.organizer_id).filter(Boolean)),
+  ];
+
+  if (!organizerIds.length) return rows;
+
+  const organizers = await User.findAll({
+    where: { id: organizerIds },
+    attributes: ["id", "organization_name", "full_name", "phone", "email"],
+  });
+  const organizerById = new Map(
+    organizers.map((organizer) => [organizer.id, organizer.toJSON()])
+  );
+
+  return rows.map((event) => ({
+    ...event,
+    organizer: organizerById.get(event.organizer_id) || null,
+  }));
+};
+
+const attachTicketTypesToEvent = async (eventRow) => {
+  const ticketTypes = await TicketType.findAll({
+    where: { event_id: eventRow.id },
+    attributes: ["id", "name", "price", "total_quantity", "remaining_quantity"],
+    order: [["price", "ASC"]],
+  });
+  return {
+    ...eventRow,
+    ticketTypes: ticketTypes.map((tier) => tier.toJSON()),
+  };
+};
+
 // Create new event
 const createEvent = async (req, res) => {
   try {
@@ -217,7 +255,7 @@ const getPublicEvents = async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     const whereClause = {
-      status: { [Op.in]: ["approved", "active"] },
+      status: { [Op.in]: PUBLIC_EVENT_STATUSES },
       // event_date: { [Op.gte]: new Date() }, // Temporarily disabled for testing
     };
 
@@ -236,26 +274,19 @@ const getPublicEvents = async (req, res) => {
 
     const events = await Event.findAll({
       where: whereClause,
-      include: [
-        {
-          model: User,
-          as: "organizer",
-          attributes: ["organization_name"],
-        },
-        {
-          model: TicketType,
-          as: "ticketTypes",
-          attributes: ["id", "name", "price", "remaining_quantity"],
-        },
-      ],
       limit: limitNum,
       offset: offset,
       order: [["event_date", "ASC"]],
     });
 
+    const withOrganizers = await attachOrganizersToEvents(events);
+    const data = await Promise.all(
+      withOrganizers.map((event) => attachTicketTypesToEvent(event))
+    );
+
     res.status(200).json({
       success: true,
-      data: events,
+      data,
       count: totalCount,
       page: pageNum,
       limit: limitNum,
@@ -276,32 +307,7 @@ const getPublicEventById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const event = await Event.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: "organizer",
-          attributes: [
-            "organization_name",
-            "full_name",
-            "phone",
-            "email",
-          ],
-        },
-        {
-          model: TicketType,
-          as: "ticketTypes",
-          attributes: [
-            "id",
-            "name",
-            "price",
-            "total_quantity",
-            "remaining_quantity",
-          ],
-        },
-        // No purchases included for public access
-      ],
-    });
+    const event = await Event.findByPk(id);
 
     if (!event) {
       return res.status(404).json({
@@ -311,16 +317,19 @@ const getPublicEventById = async (req, res) => {
     }
 
     // Only show approved/active events to public
-    if (!["approved", "active"].includes(event.status)) {
+    if (!PUBLIC_EVENT_STATUSES.includes(event.status)) {
       return res.status(404).json({
         success: false,
         message: "Event not found",
       });
     }
 
+    const [withOrganizer] = await attachOrganizersToEvents([event]);
+    const data = await attachTicketTypesToEvent(withOrganizer);
+
     res.status(200).json({
       success: true,
-      data: event,
+      data,
     });
   } catch (error) {
     console.error("Error fetching public event:", error);
