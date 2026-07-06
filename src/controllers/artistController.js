@@ -227,9 +227,60 @@ const listPublicArtists = async (req, res) => {
       order: [["stage_name", "ASC"]],
     });
 
+    const artistIds = artists.map((artist) => artist.id);
+    let upcomingCounts = new Map();
+    let totalCounts = new Map();
+
+    if (artistIds.length) {
+      const today = startOfToday();
+      const [upcomingRows, totalRows] = await Promise.all([
+        ArtistSchedule.findAll({
+          attributes: [
+            "artist_id",
+            [ArtistSchedule.sequelize.fn("COUNT", ArtistSchedule.sequelize.col("id")), "count"],
+          ],
+          where: {
+            artist_id: artistIds,
+            is_public: true,
+            activity_date: { [Op.gte]: today },
+          },
+          group: ["artist_id"],
+          raw: true,
+        }),
+        ArtistSchedule.findAll({
+          attributes: [
+            "artist_id",
+            [ArtistSchedule.sequelize.fn("COUNT", ArtistSchedule.sequelize.col("id")), "count"],
+          ],
+          where: {
+            artist_id: artistIds,
+            is_public: true,
+          },
+          group: ["artist_id"],
+          raw: true,
+        }),
+      ]);
+
+      upcomingCounts = new Map(
+        upcomingRows.map((row) => [
+          String(row.artist_id),
+          Number(row.count) || 0,
+        ])
+      );
+      totalCounts = new Map(
+        totalRows.map((row) => [String(row.artist_id), Number(row.count) || 0])
+      );
+    }
+
+    const artistsWithCounts = artists.map((artist) => ({
+      ...artist.toJSON(),
+      upcomingShows: upcomingCounts.get(String(artist.id)) || 0,
+      totalShows: totalCounts.get(String(artist.id)) || 0,
+    }));
+
     res.status(200).json({
       success: true,
-      data: artists,
+      data: artistsWithCounts,
       count: totalCount,
       page: pageNum,
       limit: limitNum,
