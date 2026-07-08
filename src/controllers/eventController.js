@@ -56,6 +56,62 @@ const attachTicketTypesToEvent = async (eventRow) => {
   };
 };
 
+const attachTicketTypesToEvents = async (eventRows) => {
+  if (!eventRows.length) return [];
+
+  const eventIds = eventRows.map((event) => event.id).filter(Boolean);
+  if (!eventIds.length) {
+    return eventRows.map((event) => ({ ...event, ticketTypes: [] }));
+  }
+
+  const ticketTypes = await TicketType.findAll({
+    where: { event_id: eventIds },
+    attributes: [
+      "id",
+      "event_id",
+      "name",
+      "price",
+      "total_quantity",
+      "remaining_quantity",
+    ],
+    order: [["price", "ASC"]],
+  });
+
+  const tiersByEventId = new Map();
+  for (const tier of ticketTypes) {
+    const json = tier.toJSON();
+    const list = tiersByEventId.get(json.event_id) || [];
+    list.push(json);
+    tiersByEventId.set(json.event_id, list);
+  }
+
+  return eventRows.map((event) => ({
+    ...event,
+    ticketTypes: tiersByEventId.get(event.id) || [],
+  }));
+};
+
+const attachPurchasesToEvent = async (eventRow) => {
+  const purchases = await TicketPurchase.findAll({
+    where: { event_id: eventRow.id },
+    attributes: ["id", "quantity", "status", "createdAt"],
+    order: [["createdAt", "DESC"]],
+  });
+  return {
+    ...eventRow,
+    purchases: purchases.map((purchase) => purchase.toJSON()),
+  };
+};
+
+const enrichEvents = async (events, { withPurchases = false } = {}) => {
+  const withOrganizers = await attachOrganizersToEvents(events);
+  const withTicketTypes = await attachTicketTypesToEvents(withOrganizers);
+  if (!withPurchases) return withTicketTypes;
+  return Promise.all(
+    withTicketTypes.map((event) => attachPurchasesToEvent(event))
+  );
+};
+
 // Create new event
 const createEvent = async (req, res) => {
   try {
@@ -210,26 +266,16 @@ const getAllEvents = async (req, res) => {
 
     const events = await Event.findAll({
       where: whereClause,
-      include: [
-        {
-          model: User,
-          as: "organizer",
-          attributes: ["organization_name", "full_name", "phone"],
-        },
-        {
-          model: TicketType,
-          as: "ticketTypes",
-          attributes: ["id", "name", "price", "remaining_quantity"],
-        },
-      ],
       limit: limitNum,
       offset: offset,
       order: [["event_date", "ASC"]],
     });
 
+    const data = await enrichEvents(events);
+
     res.status(200).json({
       success: true,
-      data: events,
+      data,
       count: totalCount,
       page: pageNum,
       limit: limitNum,
@@ -279,10 +325,7 @@ const getPublicEvents = async (req, res) => {
       order: [["event_date", "ASC"]],
     });
 
-    const withOrganizers = await attachOrganizersToEvents(events);
-    const data = await Promise.all(
-      withOrganizers.map((event) => attachTicketTypesToEvent(event))
-    );
+    const data = await enrichEvents(events);
 
     res.status(200).json({
       success: true,
@@ -324,8 +367,7 @@ const getPublicEventById = async (req, res) => {
       });
     }
 
-    const [withOrganizer] = await attachOrganizersToEvents([event]);
-    const data = await attachTicketTypesToEvent(withOrganizer);
+    const [data] = await enrichEvents([event]);
 
     res.status(200).json({
       success: true,
@@ -346,36 +388,7 @@ const getEventById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const event = await Event.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: "organizer",
-          attributes: [
-            "organization_name",
-            "full_name",
-            "phone",
-            "email",
-          ],
-        },
-        {
-          model: TicketType,
-          as: "ticketTypes",
-          attributes: [
-            "id",
-            "name",
-            "price",
-            "total_quantity",
-            "remaining_quantity",
-          ],
-        },
-        {
-          model: TicketPurchase,
-          as: "purchases",
-          attributes: ["id", "quantity", "status", "createdAt"],
-        },
-      ],
-    });
+    const event = await Event.findByPk(id);
 
     if (!event) {
       return res.status(404).json({
@@ -384,9 +397,11 @@ const getEventById = async (req, res) => {
       });
     }
 
+    const [data] = await enrichEvents([event], { withPurchases: true });
+
     res.status(200).json({
       success: true,
-      data: event,
+      data,
     });
   } catch (error) {
     console.error("Error fetching event:", error);

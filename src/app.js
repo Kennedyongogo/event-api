@@ -3,7 +3,7 @@ const path = require("path");
 const cors = require("cors");
 const fs = require("fs");
 
-const { initializeModels, setupAssociations } = require("./models");
+const { initializeModels, setupAssociations, sequelize } = require("./models");
 const { errorHandler } = require("./middleware/errorHandler");
 
 const userRoutes = require("./routes/userRoutes");
@@ -27,6 +27,20 @@ const app = express();
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cors());
+
+app.get("/api/health", async (req, res) => {
+  try {
+    await appInitialized;
+    await sequelize.authenticate();
+    res.status(200).json({ success: true, status: "ready" });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      status: "starting",
+      message: error.message,
+    });
+  }
+});
 
 app.use((req, res, next) => {
   console.log(`🔍 [${new Date().toISOString()}] ${req.method} ${req.url}`);

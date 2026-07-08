@@ -53,7 +53,9 @@ RUN npm install -g pm2
 # Copy the rest of the application
 COPY . ./
 
+ENV NODE_ENV=production
+
 EXPOSE 4000
 
-# Use PM2 to run the app in production mode
-CMD ["pm2-runtime", "src/server.js", "-i", "max"]
+# Single worker — avoids parallel sequelize.sync races on deploy
+CMD ["pm2-runtime", "src/server.js", "-i", "1"]

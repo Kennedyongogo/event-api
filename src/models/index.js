@@ -20,10 +20,15 @@ const initializeModels = async () => {
   try {
     console.log("🔄 Creating/updating tables...");
 
-    console.log("📋 Syncing parent tables...");
-    await User.sync({ force: false, alter: true });
-    await Event.sync({ force: false, alter: true });
-    await ArtistSchedule.sync({ force: false, alter: true });
+    const isProduction = process.env.NODE_ENV === "production";
+    const parentSync = { force: false, alter: !isProduction };
+
+    console.log(
+      `📋 Syncing parent tables (alter=${parentSync.alter ? "on" : "off"})...`
+    );
+    await User.sync(parentSync);
+    await Event.sync(parentSync);
+    await ArtistSchedule.sync(parentSync);
 
     console.log("📋 Syncing child tables...");
     await TicketType.sync({ force: false, alter: false });
@@ -38,6 +43,8 @@ const initializeModels = async () => {
 };
 
 const setupAssociations = () => {
+  if (setupAssociations.ready) return;
+
   try {
     models.User.hasMany(models.Event, {
       foreignKey: "organizer_id",
@@ -94,6 +101,7 @@ const setupAssociations = () => {
     });
 
     console.log("✅ All associations set up successfully");
+    setupAssociations.ready = true;
   } catch (error) {
     console.error("❌ Error during setupAssociations:", error);
     throw error;
