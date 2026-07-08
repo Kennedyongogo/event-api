@@ -32,7 +32,15 @@ const attachOrganizersToEvents = async (events) => {
 
   const organizers = await User.findAll({
     where: { id: organizerIds },
-    attributes: ["id", "organization_name", "full_name", "phone", "email"],
+    attributes: [
+      "id",
+      "organization_name",
+      "full_name",
+      "phone",
+      "email",
+      "profile_image",
+      "bio",
+    ],
   });
   const organizerById = new Map(
     organizers.map((organizer) => [organizer.id, organizer.toJSON()])
