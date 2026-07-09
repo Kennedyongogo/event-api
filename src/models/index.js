@@ -1,4 +1,5 @@
 const { sequelize } = require("../config/database");
+const { runSchemaMigrations } = require("../utils/schemaMigrations");
 
 const User = require("./user")(sequelize);
 const Event = require("./event")(sequelize);
@@ -26,6 +27,7 @@ const initializeModels = async () => {
     console.log(
       `📋 Syncing parent tables (alter=${parentSync.alter ? "on" : "off"})...`
     );
+    await runSchemaMigrations(sequelize);
     await User.sync(parentSync);
     await Event.sync(parentSync);
     await ArtistSchedule.sync(parentSync);

@@ -1,4 +1,4 @@
-const { User, ArtistSchedule } = require("../models");
+const { User, ArtistSchedule, sequelize } = require("../models");
 const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const config = require("../config/config");
@@ -10,6 +10,12 @@ const {
   collectUploadedProfilePaths,
   withResolvedProfileImages,
 } = require("../utils/profileImages");
+const {
+  normalizeArtistGenres,
+  parseGenreFromBody,
+  withPortalArtistGenres,
+  withPublicArtistGenres,
+} = require("../utils/artistGenres");
 const { sanitizeUser, signToken } = require("./userController");
 const { WRONG_ACCOUNT_TYPE, organizerPortalWrongTabMessage } = require("../utils/authMessages");
 
@@ -88,8 +94,11 @@ const normalizeSocialUrl = (value) => {
   return trimmed || null;
 };
 
-const formatArtistResponse = (artist) =>
-  withResolvedProfileImages(sanitizeUser(artist));
+const formatArtistPortalResponse = (artist) =>
+  withPortalArtistGenres(withResolvedProfileImages(sanitizeUser(artist)));
+
+const formatPublicArtistResponse = (artist) =>
+  withPublicArtistGenres(withResolvedProfileImages(sanitizeUser(artist)));
 
 const applyProfileImageUpdates = (artist, req) => {
   const removeAll =
@@ -165,7 +174,7 @@ const registerArtist = async (req, res) => {
       phone,
       stage_name: stage_name || full_name,
       bio,
-      genre,
+      genre: normalizeArtistGenres(genre),
       profile_image: syncedImages.profile_image,
       profile_images: syncedImages.profile_images,
       facebook_url: normalizeSocialUrl(facebook_url),
@@ -181,7 +190,7 @@ const registerArtist = async (req, res) => {
       success: true,
       message: "Artist account created. Add your schedule anytime.",
       data: {
-        artist: formatArtistResponse(artist),
+        artist: formatArtistPortalResponse(artist),
         token,
       },
     });
@@ -246,7 +255,7 @@ const loginArtist = async (req, res) => {
       success: true,
       message: "Login successful",
       data: {
-        artist: formatArtistResponse(artist),
+        artist: formatArtistPortalResponse(artist),
         token,
       },
     });
@@ -268,12 +277,19 @@ const listPublicArtists = async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     const where = { role: "artist", isActive: true };
-    if (genre) where.genre = genre;
+    if (genre) {
+      where[Op.and] = [
+        ...(where[Op.and] ? [where[Op.and]] : []),
+        { genre: { [Op.contains]: [genre] } },
+      ];
+    }
     if (search) {
       where[Op.or] = [
         { full_name: { [Op.iLike]: `%${search}%` } },
         { stage_name: { [Op.iLike]: `%${search}%` } },
-        { genre: { [Op.iLike]: `%${search}%` } },
+        sequelize.where(sequelize.cast(sequelize.col("genre"), "text"), {
+          [Op.iLike]: `%${search}%`,
+        }),
       ];
     }
 
@@ -332,7 +348,7 @@ const listPublicArtists = async (req, res) => {
     }
 
     const artistsWithCounts = artists.map((artist) => ({
-      ...withResolvedProfileImages(artist),
+      ...formatPublicArtistResponse(artist),
       upcomingShows: upcomingCounts.get(String(artist.id)) || 0,
       totalShows: totalCounts.get(String(artist.id)) || 0,
     }));
@@ -368,7 +384,7 @@ const getPublicArtist = async (req, res) => {
       });
     }
 
-    res.status(200).json({ success: true, data: formatArtistResponse(artist) });
+    res.status(200).json({ success: true, data: formatPublicArtistResponse(artist) });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -381,7 +397,7 @@ const getPublicArtist = async (req, res) => {
 const getMyProfile = async (req, res) => {
   res.status(200).json({
     success: true,
-    data: formatArtistResponse(req.user),
+    data: formatArtistPortalResponse(req.user),
   });
 };
 
@@ -408,7 +424,7 @@ const updateMyProfile = async (req, res) => {
       phone: phone ?? artist.phone,
       stage_name: stage_name ?? artist.stage_name,
       bio: bio ?? artist.bio,
-      genre: genre ?? artist.genre,
+      ...(genre !== undefined ? { genre: parseGenreFromBody(genre) } : {}),
       profile_image: syncedImages.profile_image,
       profile_images: syncedImages.profile_images,
       ...(facebook_url !== undefined
@@ -431,7 +447,7 @@ const updateMyProfile = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Profile updated",
-      data: formatArtistResponse(artist),
+      data: formatArtistPortalResponse(artist),
     });
   } catch (error) {
     res.status(500).json({

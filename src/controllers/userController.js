@@ -11,6 +11,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const config = require("../config/config");
 const { convertToRelativePath } = require("../utils/filePath");
+const { parseGenreFromBody } = require("../utils/artistGenres");
 const { WRONG_ACCOUNT_TYPE, organizerPortalWrongTabMessage } = require("../utils/authMessages");
 
 const JWT_TYPE_BY_ROLE = {
@@ -457,7 +458,11 @@ const updateProfile = async (req, res) => {
       pesapal_merchant_ref: pesapal_merchant_ref ?? user.pesapal_merchant_ref,
       stage_name: stage_name ?? user.stage_name,
       bio: bio ?? user.bio,
-      genre: genre ?? user.genre,
+      ...(user.role === "artist" && genre !== undefined
+        ? { genre: parseGenreFromBody(genre) }
+        : genre !== undefined
+          ? { genre }
+          : {}),
       isActive: parsedActive,
     });
 

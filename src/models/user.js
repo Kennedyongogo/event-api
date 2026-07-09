@@ -71,8 +71,9 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
       genre: {
-        type: DataTypes.STRING,
+        type: DataTypes.JSON,
         allowNull: true,
+        defaultValue: [],
       },
       profile_image: {
         type: DataTypes.STRING,
