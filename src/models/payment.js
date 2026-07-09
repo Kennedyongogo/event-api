@@ -33,6 +33,26 @@ module.exports = (sequelize) => {
         type: DataTypes.DECIMAL(10, 2),
         defaultValue: 0.0,
       },
+      ticket_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+      },
+      merchandise_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+      },
+      ticket_commission: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+      },
+      merchandise_commission: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+      },
       payment_method: {
         type: DataTypes.STRING,
         allowNull: true,

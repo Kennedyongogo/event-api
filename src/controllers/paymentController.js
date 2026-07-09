@@ -7,6 +7,8 @@ const {
 } = require("../models");
 const { sequelize } = require("../models");
 const { Op } = require("sequelize");
+const { calculatePurchaseCommission } = require("../utils/commission");
+const { applyMerchandiseStockDelta } = require("../utils/merchandise");
 
 // Mock Pesapal payment initiation
 const initiatePayment = async (req, res) => {
@@ -44,12 +46,28 @@ const initiatePayment = async (req, res) => {
     }
 
     // Get event commission rate (commission is per event, not per organizer)
-    const commissionRate = purchase.event.commission_rate || 10.0;
-    const amount = parseFloat(purchase.total_amount);
+    const eventCommissionRate = purchase.event.commission_rate || 10;
+    const ticketAmount = parseFloat(
+      purchase.ticket_subtotal ?? purchase.total_amount
+    );
+    const merchandiseLines = (purchase.merchandise_items || []).map((line) => ({
+      merchandise_id: line.merchandise_id,
+      name: line.name,
+      pickup_point: line.pickup_point,
+      image_url: line.image_url,
+      unit_price: line.unit_price,
+      quantity: line.quantity,
+      commission_rate: line.commission_rate,
+    }));
 
-    // Calculate split
-    const adminShare = (amount * commissionRate) / 100;
-    const organizerShare = amount - adminShare;
+    const commission = calculatePurchaseCommission({
+      ticketAmount,
+      merchandiseLines,
+      eventCommissionRate,
+    });
+    const amount = commission.totalAmount;
+    const adminShare = commission.platformFeeTotal;
+    const organizerShare = commission.organizerShareTotal;
 
     // Create payment record
     const payment = await Payment.create({
@@ -58,6 +76,10 @@ const initiatePayment = async (req, res) => {
       commission_amount: adminShare,
       organizer_share: organizerShare,
       admin_share: adminShare,
+      ticket_amount: commission.ticketAmount,
+      merchandise_amount: commission.merchandiseAmount,
+      ticket_commission: commission.ticketCommission,
+      merchandise_commission: commission.merchandiseCommission,
       payment_method: payment_method || "M-Pesa",
       status: "pending",
       pesapal_transaction_id: `MOCK-TXN-${Date.now()}`, // Mock transaction ID
@@ -90,6 +112,10 @@ const initiatePayment = async (req, res) => {
         payment_id: payment.id,
         purchase_id: purchase.id,
         amount: payment.amount,
+        ticket_amount: payment.ticket_amount,
+        merchandise_amount: payment.merchandise_amount,
+        ticket_commission: payment.ticket_commission,
+        merchandise_commission: payment.merchandise_commission,
         organizer_share: payment.organizer_share,
         admin_share: payment.admin_share,
         status: payment.status,
@@ -118,6 +144,12 @@ const mockPayment = async (req, res) => {
         {
           model: TicketPurchase,
           as: "purchase",
+          include: [
+            {
+              model: Event,
+              as: "event",
+            },
+          ],
         },
       ],
     });
@@ -162,6 +194,20 @@ const mockPayment = async (req, res) => {
         remaining_quantity:
           purchase.ticketType.remaining_quantity + purchase.quantity,
       });
+
+      if (
+        purchase.merchandise_items?.length &&
+        purchase.event_id
+      ) {
+        const purchaseEvent = await Event.findByPk(purchase.event_id);
+        if (purchaseEvent) {
+          await applyMerchandiseStockDelta(
+            purchaseEvent,
+            purchase.merchandise_items,
+            1
+          );
+        }
+      }
 
       res.status(200).json({
         success: false,
@@ -236,6 +282,17 @@ const paymentCallback = async (req, res) => {
           payment.purchase.ticketType.remaining_quantity +
           payment.purchase.quantity,
       });
+
+      if (payment.purchase.merchandise_items?.length) {
+        const purchaseEvent = await Event.findByPk(payment.purchase.event_id);
+        if (purchaseEvent) {
+          await applyMerchandiseStockDelta(
+            purchaseEvent,
+            payment.purchase.merchandise_items,
+            1
+          );
+        }
+      }
 
       res.status(200).json({
         success: false,

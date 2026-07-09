@@ -42,6 +42,23 @@ module.exports = (sequelize) => {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
       },
+      ticket_subtotal: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+      },
+      merchandise_subtotal: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+      },
+      merchandise_items: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+        comment:
+          "Merchandise line items with commission breakdown [{ merchandise_id, name, quantity, unit_price, line_total, commission_rate, platform_fee, organizer_share, pickup_point }]",
+      },
       qr_code: {
         type: DataTypes.STRING,
         allowNull: true,

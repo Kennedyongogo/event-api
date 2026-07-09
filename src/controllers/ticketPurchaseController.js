@@ -5,6 +5,11 @@ const {
   Payment,
 } = require("../models");
 const { sequelize } = require("../models");
+const { calculatePurchaseCommission } = require("../utils/commission");
+const {
+  buildMerchandisePurchaseLines,
+  applyMerchandiseStockDelta,
+} = require("../utils/merchandise");
 
 // Create ticket purchase (initiate) - Anonymous (no login required)
 const createPurchase = async (req, res) => {
@@ -16,6 +21,7 @@ const createPurchase = async (req, res) => {
       buyer_name,
       buyer_email,
       buyer_phone,
+      merchandise = [],
     } = req.body;
 
     // Validate buyer information
@@ -65,8 +71,15 @@ const createPurchase = async (req, res) => {
       });
     }
 
-    // Calculate total amount
-    const total_amount = ticketType.price * quantity;
+    // Calculate ticket subtotal
+    const ticket_subtotal = ticketType.price * quantity;
+    const merchandiseLines = buildMerchandisePurchaseLines(event, merchandise);
+    const commission = calculatePurchaseCommission({
+      ticketAmount: ticket_subtotal,
+      merchandiseLines,
+      eventCommissionRate: event.commission_rate || 10,
+    });
+    const total_amount = commission.totalAmount;
 
     // Create purchase record with buyer info (no user_id needed)
     const purchase = await TicketPurchase.create({
@@ -77,6 +90,9 @@ const createPurchase = async (req, res) => {
       event_id,
       ticket_type_id,
       quantity,
+      ticket_subtotal: commission.ticketAmount,
+      merchandise_subtotal: commission.merchandiseAmount,
+      merchandise_items: commission.merchandise,
       total_amount,
       status: "pending", // Awaiting payment
     });
@@ -86,17 +102,28 @@ const createPurchase = async (req, res) => {
       remaining_quantity: ticketType.remaining_quantity - quantity,
     });
 
+    if (merchandiseLines.length) {
+      await applyMerchandiseStockDelta(event, merchandiseLines, -1);
+    }
+
     res.status(201).json({
       success: true,
       message: "Purchase initiated successfully. Proceed to payment.",
       data: {
         purchase_id: purchase.id,
         total_amount,
+        ticket_subtotal: commission.ticketAmount,
+        merchandise_subtotal: commission.merchandiseAmount,
+        platform_fee: commission.platformFeeTotal,
+        organizer_share: commission.organizerShareTotal,
+        ticket_commission: commission.ticketCommission,
+        merchandise_commission: commission.merchandiseCommission,
         quantity,
         ticket_type: ticketType.name,
         event: event.event_name,
         buyer_name,
         buyer_email,
+        merchandise_items: commission.merchandise,
       },
     });
   } catch (error) {
@@ -344,11 +371,25 @@ const cancelPurchase = async (req, res) => {
       });
     }
 
+    const purchaseEvent = await Event.findByPk(purchase.event_id);
+
     // Restore ticket quantity
     await purchase.ticketType.update({
       remaining_quantity:
         purchase.ticketType.remaining_quantity + purchase.quantity,
     });
+
+    if (
+      purchaseEvent &&
+      Array.isArray(purchase.merchandise_items) &&
+      purchase.merchandise_items.length
+    ) {
+      await applyMerchandiseStockDelta(
+        purchaseEvent,
+        purchase.merchandise_items,
+        1
+      );
+    }
 
     // Update purchase status
     await purchase.update({ status: "cancelled" });

@@ -108,7 +108,11 @@ const getOrganizerDashboardStats = async (req, res) => {
         `
         SELECT
           COALESCE(SUM(p.organizer_share), 0) AS "organizerEarnings",
-          COALESCE(SUM(p.admin_share), 0) AS "platformFees"
+          COALESCE(SUM(p.admin_share), 0) AS "platformFees",
+          COALESCE(SUM(p.ticket_amount), 0) AS "ticketSales",
+          COALESCE(SUM(p.merchandise_amount), 0) AS "merchandiseSales",
+          COALESCE(SUM(p.ticket_commission), 0) AS "ticketCommission",
+          COALESCE(SUM(p.merchandise_commission), 0) AS "merchandiseCommission"
         FROM payments p
         INNER JOIN ticket_purchases tp ON p.purchase_id = tp.id
         INNER JOIN events e ON tp.event_id = e.id
@@ -221,6 +225,10 @@ const getOrganizerDashboardStats = async (req, res) => {
             gross: toMoney(gross.grossSales),
             earnings: toMoney(earnings.organizerEarnings),
             platformFees: toMoney(earnings.platformFees),
+            ticketSales: toMoney(earnings.ticketSales),
+            merchandiseSales: toMoney(earnings.merchandiseSales),
+            ticketCommission: toMoney(earnings.ticketCommission),
+            merchandiseCommission: toMoney(earnings.merchandiseCommission),
           },
         },
         rates: {
@@ -375,6 +383,19 @@ const getOrganizerRevenueAnalytics = async (req, res) => {
         [sequelize.fn("SUM", sequelize.col("amount")), "grossSales"],
         [sequelize.fn("SUM", sequelize.col("organizer_share")), "organizerEarnings"],
         [sequelize.fn("SUM", sequelize.col("admin_share")), "platformFees"],
+        [sequelize.fn("SUM", sequelize.col("ticket_amount")), "ticketSales"],
+        [
+          sequelize.fn("SUM", sequelize.col("merchandise_amount")),
+          "merchandiseSales",
+        ],
+        [
+          sequelize.fn("SUM", sequelize.col("ticket_commission")),
+          "ticketCommission",
+        ],
+        [
+          sequelize.fn("SUM", sequelize.col("merchandise_commission")),
+          "merchandiseCommission",
+        ],
         [
           sequelize.fn("COUNT", sequelize.col("Payment.id")),
           "transactionCount",
@@ -409,6 +430,10 @@ const getOrganizerRevenueAnalytics = async (req, res) => {
       grossSales: toMoney(row.grossSales),
       organizerEarnings: toMoney(row.organizerEarnings),
       platformFees: toMoney(row.platformFees),
+      ticketSales: toMoney(row.ticketSales),
+      merchandiseSales: toMoney(row.merchandiseSales),
+      ticketCommission: toMoney(row.ticketCommission),
+      merchandiseCommission: toMoney(row.merchandiseCommission),
       transactionCount: toInt(row.transactionCount),
     }));
 
@@ -451,12 +476,21 @@ const getOrganizerRevenueAnalytics = async (req, res) => {
         grossSales: acc.grossSales + toNumber(row.grossSales),
         organizerEarnings: acc.organizerEarnings + toNumber(row.organizerEarnings),
         platformFees: acc.platformFees + toNumber(row.platformFees),
+        ticketSales: acc.ticketSales + toNumber(row.ticketSales),
+        merchandiseSales: acc.merchandiseSales + toNumber(row.merchandiseSales),
+        ticketCommission: acc.ticketCommission + toNumber(row.ticketCommission),
+        merchandiseCommission:
+          acc.merchandiseCommission + toNumber(row.merchandiseCommission),
         transactionCount: acc.transactionCount + row.transactionCount,
       }),
       {
         grossSales: 0,
         organizerEarnings: 0,
         platformFees: 0,
+        ticketSales: 0,
+        merchandiseSales: 0,
+        ticketCommission: 0,
+        merchandiseCommission: 0,
         transactionCount: 0,
       }
     );
@@ -470,6 +504,10 @@ const getOrganizerRevenueAnalytics = async (req, res) => {
           grossSales: toMoney(summary.grossSales),
           organizerEarnings: toMoney(summary.organizerEarnings),
           platformFees: toMoney(summary.platformFees),
+          ticketSales: toMoney(summary.ticketSales),
+          merchandiseSales: toMoney(summary.merchandiseSales),
+          ticketCommission: toMoney(summary.ticketCommission),
+          merchandiseCommission: toMoney(summary.merchandiseCommission),
           transactionCount: summary.transactionCount,
         },
         revenueByPeriod,

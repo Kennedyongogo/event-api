@@ -101,6 +101,19 @@ const getDashboardStats = async (req, res) => {
             sequelize.fn("SUM", sequelize.col("organizer_share")),
             "organizerRevenue",
           ],
+          [sequelize.fn("SUM", sequelize.col("ticket_amount")), "ticketRevenue"],
+          [
+            sequelize.fn("SUM", sequelize.col("merchandise_amount")),
+            "merchandiseRevenue",
+          ],
+          [
+            sequelize.fn("SUM", sequelize.col("ticket_commission")),
+            "ticketCommission",
+          ],
+          [
+            sequelize.fn("SUM", sequelize.col("merchandise_commission")),
+            "merchandiseCommission",
+          ],
         ],
         where: { status: "completed", ...dateFilter },
         raw: true,
@@ -166,6 +179,10 @@ const getDashboardStats = async (req, res) => {
             total: toMoney(revenue.totalRevenue),
             admin: toMoney(revenue.adminRevenue),
             organizer: toMoney(revenue.organizerRevenue),
+            ticketSales: toMoney(revenue.ticketRevenue),
+            merchandiseSales: toMoney(revenue.merchandiseRevenue),
+            ticketCommission: toMoney(revenue.ticketCommission),
+            merchandiseCommission: toMoney(revenue.merchandiseCommission),
           },
         },
         rates: {
@@ -187,6 +204,10 @@ const getDashboardStats = async (req, res) => {
           totalRevenue: toMoney(revenue.totalRevenue),
           adminRevenue: toMoney(revenue.adminRevenue),
           organizerRevenue: toMoney(revenue.organizerRevenue),
+          ticketSales: toMoney(revenue.ticketRevenue),
+          merchandiseSales: toMoney(revenue.merchandiseRevenue),
+          ticketCommission: toMoney(revenue.ticketCommission),
+          merchandiseCommission: toMoney(revenue.merchandiseCommission),
         },
         recentActivities: {
           recentEvents,
@@ -219,6 +240,19 @@ const getRevenueAnalytics = async (req, res) => {
           sequelize.fn("SUM", sequelize.col("organizer_share")),
           "organizerRevenue",
         ],
+        [sequelize.fn("SUM", sequelize.col("ticket_amount")), "ticketRevenue"],
+        [
+          sequelize.fn("SUM", sequelize.col("merchandise_amount")),
+          "merchandiseRevenue",
+        ],
+        [
+          sequelize.fn("SUM", sequelize.col("ticket_commission")),
+          "ticketCommission",
+        ],
+        [
+          sequelize.fn("SUM", sequelize.col("merchandise_commission")),
+          "merchandiseCommission",
+        ],
         [
           sequelize.fn("COUNT", sequelize.col("Payment.id")),
           "transactionCount",
@@ -236,6 +270,10 @@ const getRevenueAnalytics = async (req, res) => {
       totalRevenue: toMoney(row.totalRevenue),
       adminRevenue: toMoney(row.adminRevenue),
       organizerRevenue: toMoney(row.organizerRevenue),
+      ticketRevenue: toMoney(row.ticketRevenue),
+      merchandiseRevenue: toMoney(row.merchandiseRevenue),
+      ticketCommission: toMoney(row.ticketCommission),
+      merchandiseCommission: toMoney(row.merchandiseCommission),
       transactionCount: toInt(row.transactionCount),
     }));
 
@@ -301,12 +339,22 @@ const getRevenueAnalytics = async (req, res) => {
         totalRevenue: acc.totalRevenue + toNumber(row.totalRevenue),
         adminRevenue: acc.adminRevenue + toNumber(row.adminRevenue),
         organizerRevenue: acc.organizerRevenue + toNumber(row.organizerRevenue),
+        ticketRevenue: acc.ticketRevenue + toNumber(row.ticketRevenue),
+        merchandiseRevenue:
+          acc.merchandiseRevenue + toNumber(row.merchandiseRevenue),
+        ticketCommission: acc.ticketCommission + toNumber(row.ticketCommission),
+        merchandiseCommission:
+          acc.merchandiseCommission + toNumber(row.merchandiseCommission),
         transactionCount: acc.transactionCount + row.transactionCount,
       }),
       {
         totalRevenue: 0,
         adminRevenue: 0,
         organizerRevenue: 0,
+        ticketRevenue: 0,
+        merchandiseRevenue: 0,
+        ticketCommission: 0,
+        merchandiseCommission: 0,
         transactionCount: 0,
       }
     );
@@ -320,6 +368,10 @@ const getRevenueAnalytics = async (req, res) => {
           totalRevenue: toMoney(summary.totalRevenue),
           adminRevenue: toMoney(summary.adminRevenue),
           organizerRevenue: toMoney(summary.organizerRevenue),
+          ticketRevenue: toMoney(summary.ticketRevenue),
+          merchandiseRevenue: toMoney(summary.merchandiseRevenue),
+          ticketCommission: toMoney(summary.ticketCommission),
+          merchandiseCommission: toMoney(summary.merchandiseCommission),
           transactionCount: summary.transactionCount,
         },
         revenueByPeriod,

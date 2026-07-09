@@ -31,9 +31,9 @@ const initializeModels = async () => {
     await ArtistSchedule.sync(parentSync);
 
     console.log("📋 Syncing child tables...");
-    await TicketType.sync({ force: false, alter: false });
-    await TicketPurchase.sync({ force: false, alter: false });
-    await Payment.sync({ force: false, alter: false });
+    await TicketType.sync({ force: false, alter: !isProduction });
+    await TicketPurchase.sync({ force: false, alter: !isProduction });
+    await Payment.sync({ force: false, alter: !isProduction });
 
     console.log("✅ All models synced successfully");
   } catch (error) {
