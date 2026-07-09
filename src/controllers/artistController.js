@@ -67,7 +67,18 @@ const artistPublicAttributes = [
   "bio",
   "genre",
   "profile_image",
+  "facebook_url",
+  "instagram_url",
+  "tiktok_url",
+  "twitter_url",
+  "linkedin_url",
 ];
+
+const normalizeSocialUrl = (value) => {
+  if (value === undefined) return undefined;
+  const trimmed = String(value || "").trim();
+  return trimmed || null;
+};
 
 const registerArtist = async (req, res) => {
   try {
@@ -79,6 +90,11 @@ const registerArtist = async (req, res) => {
       stage_name,
       bio,
       genre,
+      facebook_url,
+      instagram_url,
+      tiktok_url,
+      twitter_url,
+      linkedin_url,
     } = req.body;
 
     const normalizedEmail = String(email || "")
@@ -114,6 +130,11 @@ const registerArtist = async (req, res) => {
       bio,
       genre,
       profile_image: profileImage,
+      facebook_url: normalizeSocialUrl(facebook_url),
+      instagram_url: normalizeSocialUrl(instagram_url),
+      tiktok_url: normalizeSocialUrl(tiktok_url),
+      twitter_url: normalizeSocialUrl(twitter_url),
+      linkedin_url: normalizeSocialUrl(linkedin_url),
     });
 
     const token = signToken(artist);
@@ -336,6 +357,11 @@ const updateMyProfile = async (req, res) => {
       bio,
       genre,
       profile_image,
+      facebook_url,
+      instagram_url,
+      tiktok_url,
+      twitter_url,
+      linkedin_url,
     } = req.body;
 
     const imageUrl = convertToRelativePath(req.file?.path);
@@ -352,6 +378,21 @@ const updateMyProfile = async (req, res) => {
       profile_image: removeProfileImage
         ? null
         : imageUrl || profile_image || artist.profile_image,
+      ...(facebook_url !== undefined
+        ? { facebook_url: normalizeSocialUrl(facebook_url) }
+        : {}),
+      ...(instagram_url !== undefined
+        ? { instagram_url: normalizeSocialUrl(instagram_url) }
+        : {}),
+      ...(tiktok_url !== undefined
+        ? { tiktok_url: normalizeSocialUrl(tiktok_url) }
+        : {}),
+      ...(twitter_url !== undefined
+        ? { twitter_url: normalizeSocialUrl(twitter_url) }
+        : {}),
+      ...(linkedin_url !== undefined
+        ? { linkedin_url: normalizeSocialUrl(linkedin_url) }
+        : {}),
     });
 
     res.status(200).json({

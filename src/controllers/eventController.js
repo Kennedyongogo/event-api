@@ -17,6 +17,10 @@ const {
   parseTicketsAvailable,
   validateTicketTierQuantities,
 } = require("../utils/ticketPricing");
+const {
+  parseMerchandise,
+  mergeMerchandiseWithUploads,
+} = require("../utils/merchandise");
 
 const PUBLIC_EVENT_STATUSES = ["approved", "active"];
 
@@ -139,6 +143,7 @@ const createEvent = async (req, res) => {
       lineup,
       tickets_available,
       ticket_prices,
+      merchandise,
     } = req.body;
 
     // Get organizer_id from authenticated user
@@ -199,7 +204,15 @@ const createEvent = async (req, res) => {
     }
 
     // Handle image upload - convert absolute path to relative path
-    const image_url = convertToRelativePath(req.file?.path);
+    const eventImageFile = (req.files || []).find(
+      (f) => f.fieldname === "event_image"
+    );
+    const image_url = convertToRelativePath(eventImageFile?.path);
+    const parsedMerchandise = mergeMerchandiseWithUploads(
+      merchandise,
+      req.files,
+      convertToRelativePath
+    );
 
     // Create event with default commission rate (can be changed by admin during approval)
     const event = await Event.create({
@@ -218,6 +231,7 @@ const createEvent = async (req, res) => {
       lineup: parseLineup(lineup),
       tickets_available: ticketsParsed?.tickets_available ?? 0,
       ticket_prices: parsedTicketPrices,
+      merchandise: parsedMerchandise,
       status: "pending",
     });
 
@@ -442,6 +456,7 @@ const updateEvent = async (req, res) => {
       lineup,
       tickets_available,
       ticket_prices,
+      merchandise,
     } = req.body;
 
     const event = await Event.findByPk(id);
@@ -514,7 +529,21 @@ const updateEvent = async (req, res) => {
     }
 
     // Handle new image upload if provided
-    const newImageUrl = convertToRelativePath(req.file?.path);
+    const eventImageFile = (req.files || []).find(
+      (f) => f.fieldname === "event_image"
+    );
+    const newImageUrl = convertToRelativePath(eventImageFile?.path);
+
+    const merchandiseUpdate =
+      merchandise !== undefined
+        ? {
+            merchandise: mergeMerchandiseWithUploads(
+              merchandise,
+              req.files,
+              convertToRelativePath
+            ),
+          }
+        : {};
 
     await event.update({
       event_name: event_name || title || event.event_name,
@@ -531,6 +560,7 @@ const updateEvent = async (req, res) => {
       ...(ticket_prices !== undefined
         ? { ticket_prices: nextTicketPrices }
         : {}),
+      ...merchandiseUpdate,
     });
 
     res.status(200).json({

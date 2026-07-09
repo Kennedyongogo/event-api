@@ -74,6 +74,13 @@ module.exports = (sequelize) => {
         defaultValue: [],
         comment: "Ticket tiers, e.g. [{ category: 'VIP', price: 2000, quantity: 50 }]",
       },
+      merchandise: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+        comment:
+          "Event merch, e.g. [{ id, name, price, image_url, pickup_point, quantity_available }]",
+      },
       commission_rate: {
         type: DataTypes.DECIMAL(5, 2),
         defaultValue: 10.0,

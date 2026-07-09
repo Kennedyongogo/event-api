@@ -23,8 +23,9 @@ const storage = multer.diskStorage({
       uploadPath = path.join(__dirname, "..", "..", "uploads", "profiles");
     } else if (file.fieldname === "qr_code") {
       uploadPath = path.join(__dirname, "..", "..", "uploads", "qrcodes");
+    } else if (file.fieldname.startsWith("merchandise_image")) {
+      uploadPath = path.join(__dirname, "..", "..", "uploads", "merchandise");
     } else if (
-      file.fieldname === "documents" ||
       file.fieldname === "verification_docs"
     ) {
       uploadPath = path.join(__dirname, "..", "..", "uploads", "documents");
@@ -155,9 +156,13 @@ const handleUploadError = (error, req, res, next) => {
   next(error);
 };
 
+// Event create/update: cover image + optional merchandise images
+const uploadEventForm = upload.any();
+
 module.exports = {
   uploadEventImage,
   uploadEventImageAlt,
+  uploadEventForm,
   uploadOrganizerLogo,
   uploadProfileImage,
   uploadQRCode,

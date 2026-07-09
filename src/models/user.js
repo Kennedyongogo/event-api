@@ -78,6 +78,26 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      facebook_url: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      instagram_url: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      tiktok_url: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      twitter_url: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      linkedin_url: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,

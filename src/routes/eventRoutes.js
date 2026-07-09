@@ -20,7 +20,7 @@ const {
   optionalAuth,
   verifyOrganizerOwnership,
 } = require("../middleware/auth");
-const { uploadEventImage, handleUploadError } = require("../middleware/upload");
+const { uploadEventForm, handleUploadError } = require("../middleware/upload");
 const { errorHandler } = require("../middleware/errorHandler");
 
 // Public routes
@@ -32,14 +32,14 @@ router.get("/public/:id", optionalAuth, getPublicEventById);
 router.post(
   "/",
   authenticateOrganizer,
-  uploadEventImage,
+  uploadEventForm,
   handleUploadError,
   createEvent
 );
 router.put(
   "/:id",
   authenticateOrganizer,
-  uploadEventImage,
+  uploadEventForm,
   handleUploadError,
   updateEvent
 );
