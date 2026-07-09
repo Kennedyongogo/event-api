@@ -32,11 +32,12 @@ module.exports = (sequelize) => {
       },
       ticket_type_id: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
       },
       quantity: {
         type: DataTypes.INTEGER,
         allowNull: false,
+        defaultValue: 0,
       },
       total_amount: {
         type: DataTypes.DECIMAL(10, 2),

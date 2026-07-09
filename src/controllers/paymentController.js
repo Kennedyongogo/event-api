@@ -190,13 +190,15 @@ const mockPayment = async (req, res) => {
         include: [{ model: TicketType, as: "ticketType" }],
       });
 
-      await purchase.ticketType.update({
-        remaining_quantity:
-          purchase.ticketType.remaining_quantity + purchase.quantity,
-      });
+      if (purchase?.ticket_type_id && purchase.quantity > 0 && purchase.ticketType) {
+        await purchase.ticketType.update({
+          remaining_quantity:
+            purchase.ticketType.remaining_quantity + purchase.quantity,
+        });
+      }
 
       if (
-        purchase.merchandise_items?.length &&
+        purchase?.merchandise_items?.length &&
         purchase.event_id
       ) {
         const purchaseEvent = await Event.findByPk(purchase.event_id);
@@ -277,11 +279,17 @@ const paymentCallback = async (req, res) => {
       // Payment failed - restore tickets
       await payment.update({ status: "failed" });
 
-      await payment.purchase.ticketType.update({
-        remaining_quantity:
-          payment.purchase.ticketType.remaining_quantity +
-          payment.purchase.quantity,
-      });
+      if (
+        payment.purchase.ticket_type_id &&
+        payment.purchase.quantity > 0 &&
+        payment.purchase.ticketType
+      ) {
+        await payment.purchase.ticketType.update({
+          remaining_quantity:
+            payment.purchase.ticketType.remaining_quantity +
+            payment.purchase.quantity,
+        });
+      }
 
       if (payment.purchase.merchandise_items?.length) {
         const purchaseEvent = await Event.findByPk(payment.purchase.event_id);
@@ -539,12 +547,31 @@ const refundPayment = async (req, res) => {
     // Update purchase status
     await payment.purchase.update({ status: "refunded" });
 
-    // Restore ticket quantity
-    await payment.purchase.ticketType.update({
-      remaining_quantity:
-        payment.purchase.ticketType.remaining_quantity +
-        payment.purchase.quantity,
-    });
+    if (
+      payment.purchase.ticket_type_id &&
+      payment.purchase.quantity > 0 &&
+      payment.purchase.ticketType
+    ) {
+      await payment.purchase.ticketType.update({
+        remaining_quantity:
+          payment.purchase.ticketType.remaining_quantity +
+          payment.purchase.quantity,
+      });
+    }
+
+    if (
+      payment.purchase.merchandise_items?.length &&
+      payment.purchase.event_id
+    ) {
+      const purchaseEvent = await Event.findByPk(payment.purchase.event_id);
+      if (purchaseEvent) {
+        await applyMerchandiseStockDelta(
+          purchaseEvent,
+          payment.purchase.merchandise_items,
+          1
+        );
+      }
+    }
 
     // TODO: In production, call Pesapal refund API
 

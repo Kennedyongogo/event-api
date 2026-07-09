@@ -44,42 +44,74 @@ const createPurchase = async (req, res) => {
     if (event.status !== "approved" && event.status !== "active") {
       return res.status(400).json({
         success: false,
-        message: "Event is not available for ticket purchase",
+        message: "Event is not available for purchase",
       });
     }
 
-    // Verify ticket type exists and has availability
-    const ticketType = await TicketType.findByPk(ticket_type_id);
-    if (!ticketType) {
-      return res.status(404).json({
-        success: false,
-        message: "Ticket type not found",
-      });
-    }
+    const ticketQty = parseInt(quantity, 10) || 0;
+    const wantsTickets = Boolean(ticket_type_id) && ticketQty > 0;
 
-    if (ticketType.event_id !== event_id) {
+    let merchandiseLines = [];
+    try {
+      merchandiseLines = buildMerchandisePurchaseLines(event, merchandise);
+    } catch (merchError) {
       return res.status(400).json({
         success: false,
-        message: "Ticket type does not belong to this event",
+        message: merchError.message,
       });
     }
 
-    if (ticketType.remaining_quantity < quantity) {
+    const wantsMerchandise = merchandiseLines.length > 0;
+
+    if (!wantsTickets && !wantsMerchandise) {
       return res.status(400).json({
         success: false,
-        message: `Only ${ticketType.remaining_quantity} tickets available`,
+        message: "Select tickets, merchandise, or both",
       });
     }
 
-    // Calculate ticket subtotal
-    const ticket_subtotal = ticketType.price * quantity;
-    const merchandiseLines = buildMerchandisePurchaseLines(event, merchandise);
+    let ticketType = null;
+    let ticket_subtotal = 0;
+
+    if (wantsTickets) {
+      ticketType = await TicketType.findByPk(ticket_type_id);
+      if (!ticketType) {
+        return res.status(404).json({
+          success: false,
+          message: "Ticket type not found",
+        });
+      }
+
+      if (ticketType.event_id !== event_id) {
+        return res.status(400).json({
+          success: false,
+          message: "Ticket type does not belong to this event",
+        });
+      }
+
+      if (ticketType.remaining_quantity < ticketQty) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${ticketType.remaining_quantity} tickets available`,
+        });
+      }
+
+      ticket_subtotal = ticketType.price * ticketQty;
+    }
+
     const commission = calculatePurchaseCommission({
       ticketAmount: ticket_subtotal,
       merchandiseLines,
       eventCommissionRate: event.commission_rate || 10,
     });
     const total_amount = commission.totalAmount;
+
+    if (total_amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Purchase total must be greater than zero",
+      });
+    }
 
     // Create purchase record with buyer info (no user_id needed)
     const purchase = await TicketPurchase.create({
@@ -88,8 +120,8 @@ const createPurchase = async (req, res) => {
       buyer_email,
       buyer_phone,
       event_id,
-      ticket_type_id,
-      quantity,
+      ticket_type_id: wantsTickets ? ticket_type_id : null,
+      quantity: wantsTickets ? ticketQty : 0,
       ticket_subtotal: commission.ticketAmount,
       merchandise_subtotal: commission.merchandiseAmount,
       merchandise_items: commission.merchandise,
@@ -97,12 +129,13 @@ const createPurchase = async (req, res) => {
       status: "pending", // Awaiting payment
     });
 
-    // Reserve tickets (reduce remaining_quantity)
-    await ticketType.update({
-      remaining_quantity: ticketType.remaining_quantity - quantity,
-    });
+    if (wantsTickets && ticketType) {
+      await ticketType.update({
+        remaining_quantity: ticketType.remaining_quantity - ticketQty,
+      });
+    }
 
-    if (merchandiseLines.length) {
+    if (wantsMerchandise) {
       await applyMerchandiseStockDelta(event, merchandiseLines, -1);
     }
 
@@ -118,12 +151,18 @@ const createPurchase = async (req, res) => {
         organizer_share: commission.organizerShareTotal,
         ticket_commission: commission.ticketCommission,
         merchandise_commission: commission.merchandiseCommission,
-        quantity,
-        ticket_type: ticketType.name,
+        quantity: wantsTickets ? ticketQty : 0,
+        ticket_type: ticketType?.name || null,
         event: event.event_name,
         buyer_name,
         buyer_email,
         merchandise_items: commission.merchandise,
+        purchase_type:
+          wantsTickets && wantsMerchandise
+            ? "tickets_and_merchandise"
+            : wantsMerchandise
+              ? "merchandise_only"
+              : "tickets_only",
       },
     });
   } catch (error) {
@@ -373,11 +412,12 @@ const cancelPurchase = async (req, res) => {
 
     const purchaseEvent = await Event.findByPk(purchase.event_id);
 
-    // Restore ticket quantity
-    await purchase.ticketType.update({
-      remaining_quantity:
-        purchase.ticketType.remaining_quantity + purchase.quantity,
-    });
+    if (purchase.ticket_type_id && purchase.quantity > 0 && purchase.ticketType) {
+      await purchase.ticketType.update({
+        remaining_quantity:
+          purchase.ticketType.remaining_quantity + purchase.quantity,
+      });
+    }
 
     if (
       purchaseEvent &&
