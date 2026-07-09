@@ -3,6 +3,13 @@ const { Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const config = require("../config/config");
 const { convertToRelativePath } = require("../utils/filePath");
+const {
+  resolveProfileImages,
+  syncProfileImages,
+  parseRemoveProfileImages,
+  collectUploadedProfilePaths,
+  withResolvedProfileImages,
+} = require("../utils/profileImages");
 const { sanitizeUser, signToken } = require("./userController");
 const { WRONG_ACCOUNT_TYPE, organizerPortalWrongTabMessage } = require("../utils/authMessages");
 
@@ -67,6 +74,7 @@ const artistPublicAttributes = [
   "bio",
   "genre",
   "profile_image",
+  "profile_images",
   "facebook_url",
   "instagram_url",
   "tiktok_url",
@@ -78,6 +86,32 @@ const normalizeSocialUrl = (value) => {
   if (value === undefined) return undefined;
   const trimmed = String(value || "").trim();
   return trimmed || null;
+};
+
+const formatArtistResponse = (artist) =>
+  withResolvedProfileImages(sanitizeUser(artist));
+
+const applyProfileImageUpdates = (artist, req) => {
+  const removeAll =
+    req.body.remove_profile_image === true ||
+    req.body.remove_profile_image === "true";
+
+  let images = resolveProfileImages(artist);
+  if (removeAll) {
+    images = [];
+  } else {
+    const toRemove = parseRemoveProfileImages(req.body.remove_profile_images);
+    if (toRemove.length) {
+      images = images.filter((image) => !toRemove.includes(image));
+    }
+  }
+
+  const uploadedPaths = collectUploadedProfilePaths(req).map((filePath) =>
+    convertToRelativePath(filePath)
+  );
+  images = [...images, ...uploadedPaths.filter(Boolean)];
+
+  return syncProfileImages(images);
 };
 
 const registerArtist = async (req, res) => {
@@ -117,7 +151,10 @@ const registerArtist = async (req, res) => {
       });
     }
 
-    const profileImage = convertToRelativePath(req.file?.path);
+    const uploadedPaths = collectUploadedProfilePaths(req).map((filePath) =>
+      convertToRelativePath(filePath)
+    );
+    const syncedImages = syncProfileImages(uploadedPaths.filter(Boolean));
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const artist = await User.create({
@@ -129,7 +166,8 @@ const registerArtist = async (req, res) => {
       stage_name: stage_name || full_name,
       bio,
       genre,
-      profile_image: profileImage,
+      profile_image: syncedImages.profile_image,
+      profile_images: syncedImages.profile_images,
       facebook_url: normalizeSocialUrl(facebook_url),
       instagram_url: normalizeSocialUrl(instagram_url),
       tiktok_url: normalizeSocialUrl(tiktok_url),
@@ -143,7 +181,7 @@ const registerArtist = async (req, res) => {
       success: true,
       message: "Artist account created. Add your schedule anytime.",
       data: {
-        artist: sanitizeUser(artist),
+        artist: formatArtistResponse(artist),
         token,
       },
     });
@@ -208,7 +246,7 @@ const loginArtist = async (req, res) => {
       success: true,
       message: "Login successful",
       data: {
-        artist: sanitizeUser(artist),
+        artist: formatArtistResponse(artist),
         token,
       },
     });
@@ -294,7 +332,7 @@ const listPublicArtists = async (req, res) => {
     }
 
     const artistsWithCounts = artists.map((artist) => ({
-      ...artist.toJSON(),
+      ...withResolvedProfileImages(artist),
       upcomingShows: upcomingCounts.get(String(artist.id)) || 0,
       totalShows: totalCounts.get(String(artist.id)) || 0,
     }));
@@ -330,7 +368,7 @@ const getPublicArtist = async (req, res) => {
       });
     }
 
-    res.status(200).json({ success: true, data: artist });
+    res.status(200).json({ success: true, data: formatArtistResponse(artist) });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -343,7 +381,7 @@ const getPublicArtist = async (req, res) => {
 const getMyProfile = async (req, res) => {
   res.status(200).json({
     success: true,
-    data: sanitizeUser(req.user),
+    data: formatArtistResponse(req.user),
   });
 };
 
@@ -356,7 +394,6 @@ const updateMyProfile = async (req, res) => {
       stage_name,
       bio,
       genre,
-      profile_image,
       facebook_url,
       instagram_url,
       tiktok_url,
@@ -364,10 +401,7 @@ const updateMyProfile = async (req, res) => {
       linkedin_url,
     } = req.body;
 
-    const imageUrl = convertToRelativePath(req.file?.path);
-    const removeProfileImage =
-      req.body.remove_profile_image === true ||
-      req.body.remove_profile_image === "true";
+    const syncedImages = applyProfileImageUpdates(artist, req);
 
     await artist.update({
       full_name: full_name ?? artist.full_name,
@@ -375,9 +409,8 @@ const updateMyProfile = async (req, res) => {
       stage_name: stage_name ?? artist.stage_name,
       bio: bio ?? artist.bio,
       genre: genre ?? artist.genre,
-      profile_image: removeProfileImage
-        ? null
-        : imageUrl || profile_image || artist.profile_image,
+      profile_image: syncedImages.profile_image,
+      profile_images: syncedImages.profile_images,
       ...(facebook_url !== undefined
         ? { facebook_url: normalizeSocialUrl(facebook_url) }
         : {}),
@@ -398,7 +431,7 @@ const updateMyProfile = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Profile updated",
-      data: sanitizeUser(artist),
+      data: formatArtistResponse(artist),
     });
   } catch (error) {
     res.status(500).json({

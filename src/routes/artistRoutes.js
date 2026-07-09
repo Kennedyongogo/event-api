@@ -16,7 +16,7 @@ const {
 } = require("../controllers/artistController");
 const { authenticateArtist } = require("../middleware/auth");
 const {
-  uploadProfileImage,
+  uploadArtistProfileImages,
   uploadEventImage,
   handleUploadError,
 } = require("../middleware/upload");
@@ -28,7 +28,7 @@ router.get("/public/:id", getPublicArtist);
 router.get("/public/:id/schedule", listPublicSchedule);
 
 // Auth
-router.post("/register", uploadProfileImage, handleUploadError, registerArtist);
+router.post("/register", uploadArtistProfileImages, handleUploadError, registerArtist);
 router.post("/login", loginArtist);
 
 // Artist portal — schedule only, no ticketing
@@ -36,7 +36,7 @@ router.get("/me", authenticateArtist, getMyProfile);
 router.put(
   "/me",
   authenticateArtist,
-  uploadProfileImage,
+  uploadArtistProfileImages,
   handleUploadError,
   updateMyProfile
 );

@@ -19,7 +19,10 @@ const storage = multer.diskStorage({
       file.fieldname === "organizer_logo"
     ) {
       uploadPath = path.join(__dirname, "..", "..", "uploads", "organizers");
-    } else if (file.fieldname === "profile_image") {
+    } else if (
+      file.fieldname === "profile_image" ||
+      file.fieldname === "profile_images"
+    ) {
       uploadPath = path.join(__dirname, "..", "..", "uploads", "profiles");
     } else if (file.fieldname === "qr_code") {
       uploadPath = path.join(__dirname, "..", "..", "uploads", "qrcodes");
@@ -106,6 +109,12 @@ const uploadOrganizerLogo = upload.single("logo");
 // Middleware for single profile picture upload
 const uploadProfileImage = upload.single("profile_image");
 
+// Middleware for artist profile gallery (single legacy + multi upload)
+const uploadArtistProfileImages = upload.fields([
+  { name: "profile_image", maxCount: 1 },
+  { name: "profile_images", maxCount: 10 },
+]);
+
 // Middleware for QR code upload
 const uploadQRCode = upload.single("qr_code");
 
@@ -165,6 +174,7 @@ module.exports = {
   uploadEventForm,
   uploadOrganizerLogo,
   uploadProfileImage,
+  uploadArtistProfileImages,
   uploadQRCode,
   uploadDocuments,
   uploadVerificationDocs,

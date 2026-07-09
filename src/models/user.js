@@ -78,6 +78,11 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      profile_images: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+      },
       facebook_url: {
         type: DataTypes.STRING,
         allowNull: true,
