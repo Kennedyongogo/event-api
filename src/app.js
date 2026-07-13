@@ -61,6 +61,12 @@ const profilesUploadPath = path.join(__dirname, "..", "uploads", "profiles");
 const qrcodesUploadPath = path.join(__dirname, "..", "uploads", "qrcodes");
 const documentsUploadPath = path.join(__dirname, "..", "uploads", "documents");
 const miscUploadPath = path.join(__dirname, "..", "uploads", "misc");
+const merchandiseUploadPath = path.join(
+  __dirname,
+  "..",
+  "uploads",
+  "merchandise"
+);
 
 app.use("/uploads/events", express.static(eventsUploadPath));
 app.use("/uploads/organizers", express.static(organizersUploadPath));
@@ -68,6 +74,7 @@ app.use("/uploads/profiles", express.static(profilesUploadPath));
 app.use("/uploads/qrcodes", express.static(qrcodesUploadPath));
 app.use("/uploads/documents", express.static(documentsUploadPath));
 app.use("/uploads/misc", express.static(miscUploadPath));
+app.use("/uploads/merchandise", express.static(merchandiseUploadPath));
 
 console.log("🔗 Registering API routes...");
 app.use("/api/users", userRoutes);
@@ -174,6 +181,7 @@ const createUploadDirectories = () => {
     path.join(__dirname, "..", "uploads", "qrcodes"),
     path.join(__dirname, "..", "uploads", "documents"),
     path.join(__dirname, "..", "uploads", "misc"),
+    path.join(__dirname, "..", "uploads", "merchandise"),
   ];
 
   uploadDirs.forEach((dir) => {

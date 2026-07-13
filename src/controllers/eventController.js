@@ -540,7 +540,8 @@ const updateEvent = async (req, res) => {
             merchandise: mergeMerchandiseWithUploads(
               merchandise,
               req.files,
-              convertToRelativePath
+              convertToRelativePath,
+              event.merchandise || []
             ),
           }
         : {};
