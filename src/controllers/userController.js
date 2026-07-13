@@ -11,7 +11,10 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const config = require("../config/config");
 const { convertToRelativePath } = require("../utils/filePath");
-const { parseGenreFromBody } = require("../utils/artistGenres");
+const {
+  parseGenreFromBody,
+  withPortalArtistGenres,
+} = require("../utils/artistGenres");
 const { WRONG_ACCOUNT_TYPE, organizerPortalWrongTabMessage } = require("../utils/authMessages");
 
 const JWT_TYPE_BY_ROLE = {
@@ -23,6 +26,14 @@ const JWT_TYPE_BY_ROLE = {
 const sanitizeUser = (user) => {
   const data = user.toJSON ? user.toJSON() : { ...user };
   delete data.password;
+  return data;
+};
+
+const formatUserResponse = (user) => {
+  const data = sanitizeUser(user);
+  if (data.role === "artist") {
+    return withPortalArtistGenres(data);
+  }
   return data;
 };
 
@@ -51,7 +62,7 @@ const formatLoginPayload = (user, token) => {
     return { organizer: formatOrganizerLegacy(user), token };
   }
   if (user.role === "artist") {
-    return { artist: sanitized, token };
+    return { artist: withPortalArtistGenres(sanitized), token };
   }
   return { user: sanitized, token };
 };
@@ -348,7 +359,7 @@ const getAllUsers = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: users,
+      data: users.map((user) => formatUserResponse(user)),
       count: totalCount,
       page: pageNum,
       limit: limitNum,
@@ -394,7 +405,7 @@ const getUserById = async (req, res) => {
       });
     }
 
-    res.status(200).json({ success: true, data: user });
+    res.status(200).json({ success: true, data: formatUserResponse(user) });
   } catch (error) {
     console.error("Error fetching user:", error);
     res.status(500).json({
@@ -473,7 +484,7 @@ const updateProfile = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Profile updated successfully",
-      data: updated,
+      data: formatUserResponse(updated),
     });
   } catch (error) {
     console.error("Error updating profile:", error);
