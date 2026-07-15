@@ -51,9 +51,9 @@ router.get("/", authenticateAdminOrOrganizer, getAllEvents);
 // Protected routes - Admin only
 router.put("/:id/approve", authenticateAdmin, approveEvent);
 router.put("/:id/reject", authenticateAdmin, rejectEvent);
-router.delete("/:id", authenticateAdmin, deleteEvent);
 
 // Protected routes - Admin or Organizer
+router.delete("/:id", authenticateAdminOrOrganizer, deleteEvent);
 router.get("/:id", authenticateAdminOrOrganizer, getEventById);
 
 // Error handling middleware

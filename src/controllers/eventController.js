@@ -23,6 +23,7 @@ const {
 } = require("../utils/merchandise");
 
 const PUBLIC_EVENT_STATUSES = ["approved", "active"];
+const ORGANIZER_LOCKED_EVENT_STATUSES = ["approved", "active", "completed"];
 
 const attachOrganizersToEvents = async (events) => {
   const rows = events.map((event) =>
@@ -467,6 +468,20 @@ const updateEvent = async (req, res) => {
       });
     }
 
+    if (event.organizer_id !== req.userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only edit your own events",
+      });
+    }
+
+    if (ORGANIZER_LOCKED_EVENT_STATUSES.includes(event.status)) {
+      return res.status(403).json({
+        success: false,
+        message: "Approved events are locked and cannot be edited",
+      });
+    }
+
     if (category !== undefined && category !== "" && !isValidEventCategory(category)) {
       return res.status(400).json({
         success: false,
@@ -687,6 +702,22 @@ const deleteEvent = async (req, res) => {
         success: false,
         message: "Event not found",
       });
+    }
+
+    if (req.userType === "organizer") {
+      if (event.organizer_id !== req.userId) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only delete your own events",
+        });
+      }
+
+      if (ORGANIZER_LOCKED_EVENT_STATUSES.includes(event.status)) {
+        return res.status(403).json({
+          success: false,
+          message: "Approved events are locked and cannot be deleted",
+        });
+      }
     }
 
     await event.destroy();
