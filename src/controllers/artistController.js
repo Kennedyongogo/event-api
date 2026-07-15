@@ -18,6 +18,10 @@ const {
 } = require("../utils/artistGenres");
 const { sanitizeUser, signToken } = require("./userController");
 const { WRONG_ACCOUNT_TYPE, organizerPortalWrongTabMessage } = require("../utils/authMessages");
+const { validateTimeRange } = require("../utils/artistAvailability");
+const {
+  assertScheduleSlotFreeOfBookings,
+} = require("./artistBookingController");
 
 const parseBool = (value, fallback = true) => {
   if (value === undefined || value === null || value === "") return fallback;
@@ -628,6 +632,28 @@ const createScheduleItem = async (req, res) => {
       });
     }
 
+    const timeError = validateTimeRange(start_time, end_time);
+    if (timeError) {
+      return res.status(400).json({
+        success: false,
+        message: timeError,
+      });
+    }
+
+    const slotCheck = await assertScheduleSlotFreeOfBookings(
+      req.userId,
+      activity_date,
+      start_time,
+      end_time
+    );
+    if (!slotCheck.ok) {
+      return res.status(409).json({
+        success: false,
+        message: slotCheck.message,
+        conflict: slotCheck.conflict || null,
+      });
+    }
+
     const imageUrl = convertToRelativePath(req.file?.path);
 
     const item = await ArtistSchedule.create({
@@ -684,13 +710,39 @@ const updateScheduleItem = async (req, res) => {
       is_public,
     } = req.body;
 
+    const nextStart = start_time !== undefined ? start_time : item.start_time;
+    const nextEnd = end_time !== undefined ? end_time : item.end_time;
+    const nextDate = activity_date ?? item.activity_date;
+    const timeError = validateTimeRange(nextStart, nextEnd);
+    if (timeError) {
+      return res.status(400).json({
+        success: false,
+        message: timeError,
+      });
+    }
+
+    const slotCheck = await assertScheduleSlotFreeOfBookings(
+      req.userId,
+      nextDate,
+      nextStart,
+      nextEnd,
+      item.id
+    );
+    if (!slotCheck.ok) {
+      return res.status(409).json({
+        success: false,
+        message: slotCheck.message,
+        conflict: slotCheck.conflict || null,
+      });
+    }
+
     await item.update({
       title: title ?? item.title,
       venue: venue ?? item.venue,
       city: city ?? item.city,
-      activity_date: activity_date ?? item.activity_date,
-      start_time: start_time ?? item.start_time,
-      end_time: end_time ?? item.end_time,
+      activity_date: nextDate,
+      start_time: nextStart,
+      end_time: nextEnd,
       description: description ?? item.description,
       external_url: external_url ?? item.external_url,
       image_url: imageUrl || item.image_url,

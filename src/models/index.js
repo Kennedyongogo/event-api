@@ -4,6 +4,7 @@ const { runSchemaMigrations } = require("../utils/schemaMigrations");
 const User = require("./user")(sequelize);
 const Event = require("./event")(sequelize);
 const ArtistSchedule = require("./artistSchedule")(sequelize);
+const ArtistBooking = require("./artistBooking")(sequelize);
 const TicketType = require("./ticketType")(sequelize);
 const TicketPurchase = require("./ticketPurchase")(sequelize);
 const Payment = require("./payment")(sequelize);
@@ -12,6 +13,7 @@ const models = {
   User,
   Event,
   ArtistSchedule,
+  ArtistBooking,
   TicketType,
   TicketPurchase,
   Payment,
@@ -31,6 +33,7 @@ const initializeModels = async () => {
     await User.sync(parentSync);
     await Event.sync(parentSync);
     await ArtistSchedule.sync(parentSync);
+    await ArtistBooking.sync(parentSync);
 
     console.log("📋 Syncing child tables...");
     await TicketType.sync({ force: false, alter: !isProduction });
@@ -64,6 +67,23 @@ const setupAssociations = () => {
     models.ArtistSchedule.belongsTo(models.User, {
       foreignKey: "artist_id",
       as: "artist",
+    });
+
+    models.User.hasMany(models.ArtistBooking, {
+      foreignKey: "artist_id",
+      as: "artistBookings",
+    });
+    models.ArtistBooking.belongsTo(models.User, {
+      foreignKey: "artist_id",
+      as: "artist",
+    });
+    models.User.hasMany(models.ArtistBooking, {
+      foreignKey: "requester_user_id",
+      as: "requestedArtistBookings",
+    });
+    models.ArtistBooking.belongsTo(models.User, {
+      foreignKey: "requester_user_id",
+      as: "requester",
     });
 
     models.Event.hasMany(models.TicketType, {

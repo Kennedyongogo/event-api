@@ -14,7 +14,16 @@ const {
   updateScheduleItem,
   deleteScheduleItem,
 } = require("../controllers/artistController");
-const { authenticateArtist } = require("../middleware/auth");
+const {
+  getPublicAvailability,
+  createPublicBooking,
+  listMyBookings,
+  updateMyBookingStatus,
+} = require("../controllers/artistBookingController");
+const {
+  authenticateArtist,
+  optionalAuth,
+} = require("../middleware/auth");
 const {
   uploadArtistProfileImages,
   uploadEventImage,
@@ -26,12 +35,14 @@ const { errorHandler } = require("../middleware/errorHandler");
 router.get("/public", listPublicArtists);
 router.get("/public/:id", getPublicArtist);
 router.get("/public/:id/schedule", listPublicSchedule);
+router.get("/public/:id/availability", getPublicAvailability);
+router.post("/public/:id/bookings", optionalAuth, createPublicBooking);
 
 // Auth
 router.post("/register", uploadArtistProfileImages, handleUploadError, registerArtist);
 router.post("/login", loginArtist);
 
-// Artist portal — schedule only, no ticketing
+// Artist portal — schedule + bookings
 router.get("/me", authenticateArtist, getMyProfile);
 router.put(
   "/me",
@@ -60,6 +71,12 @@ router.delete(
   "/me/schedule/:scheduleId",
   authenticateArtist,
   deleteScheduleItem
+);
+router.get("/me/bookings", authenticateArtist, listMyBookings);
+router.put(
+  "/me/bookings/:bookingId/status",
+  authenticateArtist,
+  updateMyBookingStatus
 );
 
 router.use(errorHandler);

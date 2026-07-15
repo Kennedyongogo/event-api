@@ -21,6 +21,7 @@ const ticketTypeRoutes = require("./routes/ticketTypeRoutes");
 const ticketPurchaseRoutes = require("./routes/ticketPurchaseRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const artistRoutes = require("./routes/artistRoutes");
+const imageRoutes = require("./routes/imageRoutes");
 
 const app = express();
 
@@ -68,13 +69,30 @@ const merchandiseUploadPath = path.join(
   "merchandise"
 );
 
-app.use("/uploads/events", express.static(eventsUploadPath));
-app.use("/uploads/organizers", express.static(organizersUploadPath));
-app.use("/uploads/profiles", express.static(profilesUploadPath));
+app.use("/api/images", imageRoutes);
+
+const imageStaticOptions = {
+  maxAge: "30d",
+  immutable: true,
+  etag: true,
+};
+
+app.use("/uploads/events", express.static(eventsUploadPath, imageStaticOptions));
+app.use(
+  "/uploads/organizers",
+  express.static(organizersUploadPath, imageStaticOptions)
+);
+app.use(
+  "/uploads/profiles",
+  express.static(profilesUploadPath, imageStaticOptions)
+);
 app.use("/uploads/qrcodes", express.static(qrcodesUploadPath));
 app.use("/uploads/documents", express.static(documentsUploadPath));
 app.use("/uploads/misc", express.static(miscUploadPath));
-app.use("/uploads/merchandise", express.static(merchandiseUploadPath));
+app.use(
+  "/uploads/merchandise",
+  express.static(merchandiseUploadPath, imageStaticOptions)
+);
 
 console.log("🔗 Registering API routes...");
 app.use("/api/users", userRoutes);
