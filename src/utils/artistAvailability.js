@@ -82,9 +82,20 @@ const formatDateOnly = (value) => {
 
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const dateParts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: BOOKING_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+  const year = dateParts.year;
+  const month = dateParts.month;
+  const day = dateParts.day;
   return `${year}-${month}-${day}`;
 };
 
