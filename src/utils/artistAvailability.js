@@ -312,9 +312,15 @@ const buildDayAvailability = (
     intervalsOverlap(block.startAt, block.endAt, dayStart, dayEnd)
   );
 
-  const cutoff = opts.excludeElapsed
+  let cutoff = opts.excludeElapsed
     ? bookingCutoffForDate(dateOnly, opts.now)
     : dayStart;
+  if (
+    opts.excludeElapsed &&
+    formatDateOnly(dateOnly) === currentBookingTime(opts.now).date
+  ) {
+    cutoff = Math.floor(cutoff / 60000) * 60000 + 60000;
+  }
 
   return {
     busy_slots: busy.map(publicBusySlot),
