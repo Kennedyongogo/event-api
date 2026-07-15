@@ -21,7 +21,6 @@ const ticketTypeRoutes = require("./routes/ticketTypeRoutes");
 const ticketPurchaseRoutes = require("./routes/ticketPurchaseRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const artistRoutes = require("./routes/artistRoutes");
-const imageRoutes = require("./routes/imageRoutes");
 
 const app = express();
 
@@ -68,8 +67,6 @@ const merchandiseUploadPath = path.join(
   "uploads",
   "merchandise"
 );
-
-app.use("/api/images", imageRoutes);
 
 const imageStaticOptions = {
   maxAge: "30d",

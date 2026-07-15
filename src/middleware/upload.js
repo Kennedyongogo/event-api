@@ -1,7 +1,6 @@
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const sharp = require("sharp");
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -98,98 +97,23 @@ const upload = multer({
   },
 });
 
-const imageMaxWidth = (fieldname) => {
-  if (fieldname === "profile_image" || fieldname === "profile_images") {
-    return 1200;
-  }
-  if (fieldname === "logo" || fieldname === "organizer_logo") {
-    return 1200;
-  }
-  if (fieldname?.startsWith("merchandise_image")) return 1600;
-  return 1920;
-};
-
-const optimizeImageFile = async (file) => {
-  if (
-    !file?.mimetype?.startsWith("image/") ||
-    file.mimetype === "image/gif" ||
-    file.fieldname === "qr_code"
-  ) {
-    return;
-  }
-
-  const originalPath = file.path;
-  const parsed = path.parse(originalPath);
-  const finalPath = path.join(parsed.dir, `${parsed.name}.webp`);
-  const outputPath =
-    path.resolve(finalPath) === path.resolve(originalPath)
-      ? path.join(parsed.dir, `${parsed.name}.optimized.webp`)
-      : finalPath;
-
-  await sharp(originalPath)
-    .rotate()
-    .resize({
-      width: imageMaxWidth(file.fieldname),
-      height: imageMaxWidth(file.fieldname),
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .webp({ quality: 78, effort: 4 })
-    .toFile(outputPath);
-
-  await fs.promises.unlink(originalPath);
-  if (outputPath !== finalPath) {
-    await fs.promises.rename(outputPath, finalPath);
-  }
-
-  file.path = finalPath;
-  file.filename = path.basename(finalPath);
-  file.mimetype = "image/webp";
-  file.size = (await fs.promises.stat(finalPath)).size;
-};
-
-const uploadedFiles = (req) => {
-  if (req.file) return [req.file];
-  if (Array.isArray(req.files)) return req.files;
-  if (req.files && typeof req.files === "object") {
-    return Object.values(req.files).flat();
-  }
-  return [];
-};
-
-const withImageOptimization = (multerMiddleware) => (req, res, next) => {
-  multerMiddleware(req, res, async (error) => {
-    if (error) return next(error);
-    try {
-      await Promise.all(uploadedFiles(req).map(optimizeImageFile));
-      next();
-    } catch (optimizationError) {
-      next(optimizationError);
-    }
-  });
-};
-
 // Middleware for single event image upload (flexible field names)
-const uploadEventImage = withImageOptimization(upload.single("event_image"));
+const uploadEventImage = upload.single("event_image");
 
 // Alternative middleware for single event image upload with "image" field name
-const uploadEventImageAlt = withImageOptimization(upload.single("image"));
+const uploadEventImageAlt = upload.single("image");
 
 // Middleware for single organizer logo upload
-const uploadOrganizerLogo = withImageOptimization(upload.single("logo"));
+const uploadOrganizerLogo = upload.single("logo");
 
 // Middleware for single profile picture upload
-const uploadProfileImage = withImageOptimization(
-  upload.single("profile_image")
-);
+const uploadProfileImage = upload.single("profile_image");
 
 // Middleware for artist profile gallery (single legacy + multi upload)
-const uploadArtistProfileImages = withImageOptimization(
-  upload.fields([
-    { name: "profile_image", maxCount: 1 },
-    { name: "profile_images", maxCount: 10 },
-  ])
-);
+const uploadArtistProfileImages = upload.fields([
+  { name: "profile_image", maxCount: 1 },
+  { name: "profile_images", maxCount: 10 },
+]);
 
 // Middleware for QR code upload
 const uploadQRCode = upload.single("qr_code");
@@ -206,9 +130,7 @@ const uploadVerificationDocs = upload.fields([
 ]);
 
 // Middleware for multiple event images (if needed)
-const uploadMultipleEventImages = withImageOptimization(
-  upload.array("event_images", 5)
-); // Max 5 images
+const uploadMultipleEventImages = upload.array("event_images", 5); // Max 5 images
 
 // Error handling middleware for multer
 const handleUploadError = (error, req, res, next) => {
@@ -244,7 +166,7 @@ const handleUploadError = (error, req, res, next) => {
 };
 
 // Event create/update: cover image + optional merchandise images
-const uploadEventForm = withImageOptimization(upload.any());
+const uploadEventForm = upload.any();
 
 module.exports = {
   uploadEventImage,
