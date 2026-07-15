@@ -1,5 +1,30 @@
 const { Event } = require("../models");
-const { Op } = require("sequelize");
+const { parseTime, formatDateOnly } = require("../utils/artistAvailability");
+
+const eventEndDateTime = (event) => {
+  const dateOnly = formatDateOnly(event.event_date);
+  if (!dateOnly) return null;
+  const [year, month, day] = dateOnly.split("-").map(Number);
+
+  if (!event.end_time) {
+    return new Date(year, month - 1, day, 23, 59, 59, 999);
+  }
+
+  const end = parseTime(event.end_time);
+  if (!end) return null;
+  const start = parseTime(event.start_time);
+  const overnight =
+    start != null && end.totalSeconds < start.totalSeconds;
+
+  return new Date(
+    year,
+    month - 1,
+    day + (overnight ? 1 : 0),
+    end.hours,
+    end.minutes,
+    end.seconds,
+  );
+};
 
 /**
  * Event Status Cron Job
@@ -21,55 +46,8 @@ class EventStatusCron {
 
       const now = new Date();
 
-      // Find all approved events where the event has ended
-      const eventsToComplete = await Event.findAll({
-        where: {
-          status: "approved",
-          [Op.and]: [
-            // Event date is today or in the past
-            {
-              event_date: {
-                [Op.lte]: now,
-              },
-            },
-            // Either no end_time specified (assume end of day) or end_time has passed
-            {
-              [Op.or]: [
-                // No end_time specified - consider event ended at end of day
-                { end_time: null },
-                // End_time has passed today
-                {
-                  [Op.and]: [
-                    {
-                      event_date: {
-                        [Op.gte]: new Date(
-                          now.getFullYear(),
-                          now.getMonth(),
-                          now.getDate()
-                        ),
-                      },
-                    },
-                    {
-                      end_time: {
-                        [Op.lt]: now.toTimeString().slice(0, 8), // HH:MM:SS format
-                      },
-                    },
-                  ],
-                },
-                // Event date is in the past (regardless of end_time)
-                {
-                  event_date: {
-                    [Op.lt]: new Date(
-                      now.getFullYear(),
-                      now.getMonth(),
-                      now.getDate()
-                    ),
-                  },
-                },
-              ],
-            },
-          ],
-        },
+      const approvedEvents = await Event.findAll({
+        where: { status: "approved" },
         attributes: [
           "id",
           "event_name",
@@ -78,6 +56,10 @@ class EventStatusCron {
           "end_time",
           "status",
         ],
+      });
+      const eventsToComplete = approvedEvents.filter((event) => {
+        const endsAt = eventEndDateTime(event);
+        return endsAt != null && endsAt <= now;
       });
 
       if (eventsToComplete.length === 0) {

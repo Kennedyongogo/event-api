@@ -3,22 +3,11 @@ const { User, ArtistSchedule, ArtistBooking } = require("../models");
 const {
   BUSY_BOOKING_STATUSES,
   formatDateOnly,
+  addDaysDateOnly,
   validateTimeRange,
   buildDayAvailability,
   isSlotAvailable,
 } = require("../utils/artistAvailability");
-
-const startOfDay = (value) => {
-  const d = new Date(value);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-const endOfDay = (value) => {
-  const d = new Date(value);
-  d.setHours(23, 59, 59, 999);
-  return d;
-};
 
 const findPublicArtist = async (artistId) => {
   return User.findOne({
@@ -28,14 +17,16 @@ const findPublicArtist = async (artistId) => {
 };
 
 const loadDayBusySources = async (artistId, dateOnly, opts = {}) => {
-  const dayStart = startOfDay(dateOnly);
-  const dayEnd = endOfDay(dateOnly);
+  const previousDate = addDaysDateOnly(dateOnly, -1);
+  const nextDate = addDaysDateOnly(dateOnly, 1);
+  const rangeStart = new Date(`${previousDate}T00:00:00.000Z`);
+  const rangeEnd = new Date(`${nextDate}T23:59:59.999Z`);
 
   const [scheduleItems, bookingItems] = await Promise.all([
     ArtistSchedule.findAll({
       where: {
         artist_id: artistId,
-        activity_date: { [Op.between]: [dayStart, dayEnd] },
+        activity_date: { [Op.between]: [rangeStart, rangeEnd] },
       },
       attributes: ["id", "title", "start_time", "end_time", "activity_date"],
       order: [["start_time", "ASC"]],
@@ -43,7 +34,7 @@ const loadDayBusySources = async (artistId, dateOnly, opts = {}) => {
     ArtistBooking.findAll({
       where: {
         artist_id: artistId,
-        booking_date: dateOnly,
+        booking_date: { [Op.between]: [previousDate, nextDate] },
         status: { [Op.in]: BUSY_BOOKING_STATUSES },
         ...(opts.excludeBookingId
           ? { id: { [Op.ne]: opts.excludeBookingId } }
@@ -90,13 +81,18 @@ const getPublicAvailability = async (req, res) => {
       artist.id,
       dateOnly
     );
-    const availability = buildDayAvailability(scheduleItems, bookingItems);
+    const availability = buildDayAvailability(
+      scheduleItems,
+      bookingItems,
+      dateOnly
+    );
 
     let slot_check = null;
     if (req.query.start_time || req.query.end_time) {
       slot_check = isSlotAvailable(
         scheduleItems,
         bookingItems,
+        dateOnly,
         req.query.start_time,
         req.query.end_time
       );
@@ -180,6 +176,7 @@ const createPublicBooking = async (req, res) => {
     const check = isSlotAvailable(
       scheduleItems,
       bookingItems,
+      dateOnly,
       start_time,
       end_time
     );
@@ -348,6 +345,7 @@ const updateMyBookingStatus = async (req, res) => {
       const check = isSlotAvailable(
         scheduleItems,
         bookingItems,
+        dateOnly,
         booking.start_time,
         booking.end_time
       );
@@ -411,11 +409,14 @@ const assertScheduleSlotFreeOfBookings = async (
     dateOnly
   );
 
-  const schedules = excludeScheduleId
-    ? scheduleItems.filter((s) => s.id !== excludeScheduleId)
-    : scheduleItems;
-
-  const check = isSlotAvailable(schedules, bookingItems, start_time, end_time);
+  const check = isSlotAvailable(
+    scheduleItems,
+    bookingItems,
+    dateOnly,
+    start_time,
+    end_time,
+    { excludeScheduleId }
+  );
   if (!check.available) {
     return {
       ok: false,
