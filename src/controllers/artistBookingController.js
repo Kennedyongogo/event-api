@@ -96,7 +96,7 @@ const getPublicAvailability = async (req, res) => {
         dateOnly,
         req.query.start_time,
         req.query.end_time,
-        { enforceFuture: true }
+        { enforceFuture: true, adjustStaleStart: true }
       );
     }
 
@@ -181,7 +181,7 @@ const createPublicBooking = async (req, res) => {
       dateOnly,
       start_time,
       end_time,
-      { enforceFuture: true }
+      { enforceFuture: true, adjustStaleStart: true }
     );
 
     if (!check.available) {
@@ -199,7 +199,7 @@ const createPublicBooking = async (req, res) => {
       requester_email: requester_email.trim().toLowerCase(),
       requester_phone: requester_phone.trim(),
       booking_date: dateOnly,
-      start_time,
+      start_time: check.normalized_start_time || start_time,
       end_time,
       venue: venue?.trim() || null,
       notes: notes?.trim() || null,

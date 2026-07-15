@@ -356,13 +356,29 @@ const isSlotAvailable = (
 
   const requested = buildAbsoluteInterval(dateOnly, start_time, end_time);
   if (!requested) return { available: false, error: "Invalid date or time" };
+  let normalizedStartTime = null;
   if (opts.enforceFuture) {
     const cutoff = bookingCutoffForDate(dateOnly, opts.now);
     if (cutoff == null || requested.startAt <= cutoff) {
-      return {
-        available: false,
-        error: "Booking start time must be in the future",
-      };
+      if (!opts.adjustStaleStart || cutoff == null) {
+        return {
+          available: false,
+          error: "Booking start time must be in the future",
+        };
+      }
+      const adjustedStart = Math.floor(cutoff / 60000) * 60000 + 60000;
+      if (adjustedStart >= requested.endAt) {
+        return {
+          available: false,
+          error: "This available period has already ended",
+        };
+      }
+      requested.startAt = adjustedStart;
+      requested.start_at = new Date(adjustedStart).toISOString();
+      normalizedStartTime = timestampToDayTime(
+        adjustedStart,
+        dateOnlyToUtcMs(dateOnly)
+      );
     }
   }
 
@@ -386,6 +402,12 @@ const isSlotAvailable = (
     end_day_offset: requested.end_day_offset,
     start_at: requested.start_at,
     end_at: requested.end_at,
+    ...(normalizedStartTime
+      ? {
+          start_time_adjusted: true,
+          normalized_start_time: normalizedStartTime,
+        }
+      : {}),
   };
 };
 
