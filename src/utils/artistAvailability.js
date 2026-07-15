@@ -8,6 +8,8 @@
 
 const BUSY_BOOKING_STATUSES = ["pending", "confirmed"];
 const DAY_MS = 24 * 60 * 60 * 1000;
+const BOOKING_TIME_ZONE =
+  process.env.BOOKING_TIME_ZONE || "Africa/Nairobi";
 
 const hasTimeValue = (value) =>
   typeof value === "string" ? value.trim().length > 0 : Boolean(value);
@@ -99,6 +101,40 @@ const addDaysDateOnly = (dateOnly, days) => {
   return new Date(timestamp + Number(days) * DAY_MS)
     .toISOString()
     .slice(0, 10);
+};
+
+const currentBookingTime = (now = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BOOKING_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)])
+  );
+  const date = `${String(values.year).padStart(4, "0")}-${String(
+    values.month
+  ).padStart(2, "0")}-${String(values.day).padStart(2, "0")}`;
+  const totalSeconds =
+    values.hour * 3600 + values.minute * 60 + values.second;
+  return { date, totalSeconds };
+};
+
+const bookingCutoffForDate = (dateOnly, now = new Date()) => {
+  const normalized = formatDateOnly(dateOnly);
+  const dayStart = dateOnlyToUtcMs(normalized);
+  if (!normalized || dayStart == null) return null;
+  const current = currentBookingTime(now);
+  if (normalized < current.date) return dayStart + DAY_MS;
+  if (normalized > current.date) return dayStart;
+  return dayStart + current.totalSeconds * 1000;
 };
 
 /** Returns error message or null. */
@@ -211,7 +247,7 @@ const timestampToDayTime = (timestamp, dayStart, isDayEnd = false) => {
   return secondsToTime(seconds);
 };
 
-const freeSlotsFromBusy = (busyIntervals, dayStart) => {
+const freeSlotsFromBusy = (busyIntervals, dayStart, notBefore = dayStart) => {
   const dayEnd = dayStart + DAY_MS;
   const clipped = busyIntervals
     .filter((block) =>
@@ -223,7 +259,7 @@ const freeSlotsFromBusy = (busyIntervals, dayStart) => {
     }));
 
   const free = [];
-  let cursor = dayStart;
+  let cursor = Math.max(dayStart, Math.min(notBefore, dayEnd));
   for (const busy of mergeIntervals(clipped)) {
     if (busy.startAt > cursor) {
       free.push({
@@ -276,10 +312,14 @@ const buildDayAvailability = (
     intervalsOverlap(block.startAt, block.endAt, dayStart, dayEnd)
   );
 
+  const cutoff = opts.excludeElapsed
+    ? bookingCutoffForDate(dateOnly, opts.now)
+    : dayStart;
+
   return {
     busy_slots: busy.map(publicBusySlot),
-    free_slots: freeSlotsFromBusy(busy, dayStart),
-    is_fully_free: busy.length === 0,
+    free_slots: freeSlotsFromBusy(busy, dayStart, cutoff),
+    is_fully_free: busy.length === 0 && cutoff < dayEnd,
   };
 };
 
@@ -299,6 +339,15 @@ const isSlotAvailable = (
 
   const requested = buildAbsoluteInterval(dateOnly, start_time, end_time);
   if (!requested) return { available: false, error: "Invalid date or time" };
+  if (opts.enforceFuture) {
+    const cutoff = bookingCutoffForDate(dateOnly, opts.now);
+    if (cutoff == null || requested.startAt <= cutoff) {
+      return {
+        available: false,
+        error: "Booking start time must be in the future",
+      };
+    }
+  }
 
   const busy = collectBusyIntervals(scheduleItems, bookingItems, opts);
   for (const block of busy) {
@@ -332,6 +381,8 @@ module.exports = {
   minutesToTime,
   formatDateOnly,
   addDaysDateOnly,
+  currentBookingTime,
+  bookingCutoffForDate,
   validateTimeRange,
   buildAbsoluteInterval,
   intervalsOverlap,

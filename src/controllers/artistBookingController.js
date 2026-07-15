@@ -84,7 +84,8 @@ const getPublicAvailability = async (req, res) => {
     const availability = buildDayAvailability(
       scheduleItems,
       bookingItems,
-      dateOnly
+      dateOnly,
+      { excludeElapsed: true }
     );
 
     let slot_check = null;
@@ -94,7 +95,8 @@ const getPublicAvailability = async (req, res) => {
         bookingItems,
         dateOnly,
         req.query.start_time,
-        req.query.end_time
+        req.query.end_time,
+        { enforceFuture: true }
       );
     }
 
@@ -178,7 +180,8 @@ const createPublicBooking = async (req, res) => {
       bookingItems,
       dateOnly,
       start_time,
-      end_time
+      end_time,
+      { enforceFuture: true }
     );
 
     if (!check.available) {
@@ -347,7 +350,8 @@ const updateMyBookingStatus = async (req, res) => {
         bookingItems,
         dateOnly,
         booking.start_time,
-        booking.end_time
+        booking.end_time,
+        { enforceFuture: true }
       );
 
       if (!check.available) {
